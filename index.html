@@ -3,7 +3,7 @@
 <head>
     <meta charset="Shift_JIS">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaikoNauts 変換ツール (個別条件対応版)</title>
+    <title>TaikoNauts 変換ツール (隠し曲設定対応)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root {
@@ -44,7 +44,7 @@
             font-size: 0.9rem;
         }
         .tag {
-            background: #2ecc71;
+            background: #e67e22;
             color: white;
             padding: 2px 8px;
             border-radius: 4px;
@@ -55,7 +55,7 @@
         .box {
             border: 2px dashed #bdc3c7;
             border-radius: 8px;
-            padding: 60px 20px;
+            padding: 40px 20px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -66,6 +66,43 @@
             background: #f0f7ff;
         }
         .box p { margin: 0; font-size: 1.1rem; color: #7f8c8d; }
+        
+        /* 隠し曲設定エリア */
+        #hidden-settings {
+            display: none; /* 初期状態は非表示 */
+            margin-top: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            text-align: left;
+        }
+        #hidden-settings h3 {
+            margin-top: 0;
+            font-size: 1rem;
+            color: #2c3e50;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 8px;
+        }
+        .song-option {
+            margin: 10px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+        }
+        .song-option input {
+            transform: scale(1.2);
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .song-option label {
+            cursor: pointer;
+            width: 100%;
+            font-size: 0.95rem;
+        }
         
         button {
             width: 100%;
@@ -106,14 +143,20 @@
 <body>
 
 <div class="container">
-    <h1>TaikoNauts 変換ツール <span class="tag">個別条件対応</span></h1>
-    <div class="subtitle">曲ごとの個別条件(OpenTaiko形式)も自動解析し、dan.jsonを生成します</div>
+    <h1>TaikoNauts 変換ツール <span class="tag">隠し曲対応</span></h1>
+    <div class="subtitle">OpenTaiko形式のTJAを変換し、隠し曲(???)設定や個別条件を反映します</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
         <input type="file" id="fileInput" webkitdirectory directory multiple style="display:none">
     </div>
     <div id="status" style="text-align:center; margin-top:15px; font-weight:bold;"></div>
+
+    <div id="hidden-settings">
+        <h3>隠し曲設定 (isHidden)</h3>
+        <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">チェックを入れた曲は、段位選択画面でタイトルが「???」になります。</p>
+        <div id="song-list-container"></div>
+    </div>
 
     <button id="runBtn">変換開始</button>
 
@@ -127,6 +170,8 @@
     const runBtn = document.getElementById('runBtn');
     const logArea = document.getElementById('log');
     const statusDiv = document.getElementById('status');
+    const hiddenSettings = document.getElementById('hidden-settings');
+    const songListContainer = document.getElementById('song-list-container');
 
     let targetTjaFile = null;
     let fileMap = new Map();
@@ -150,12 +195,16 @@
         handleFiles(e.dataTransfer.files);
     });
 
-    function handleFiles(files) {
+    async function handleFiles(files) {
         fileMap.clear();
         targetTjaFile = null;
         logArea.innerHTML = '';
         statusDiv.textContent = '';
         runBtn.classList.remove('active');
+        
+        // UI初期化
+        hiddenSettings.style.display = 'none';
+        songListContainer.innerHTML = '';
 
         const fileList = Array.from(files);
         let tjaCount = 0;
@@ -172,11 +221,78 @@
             statusDiv.textContent = `読込: ${targetTjaFile.name}`;
             log(`TJAファイルを検出: ${targetTjaFile.name}`, 'ok');
             if (tjaCount > 1) log(`注意: 複数のTJAがあります。${targetTjaFile.name} を優先します。`, 'warn');
+            
+            // ★ここでファイルを先行スキャンして、隠し曲設定用のUIを作る
+            await scanSongsForHiddenSetting(targetTjaFile);
+
             runBtn.classList.add('active');
         } else {
             log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
         }
     }
+
+    // --- Pre-Scan Function for UI ---
+    async function scanSongsForHiddenSetting(file) {
+        try {
+            const text = await readFileContent(file);
+            const lines = text.split(/\r?\n/);
+            
+            // 簡易的に#NEXTSONGで分割してタイトルを取得
+            let songCount = 0;
+            let currentTag = "";
+            let isFirst = true;
+
+            // BOM削除
+            if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
+
+            for(let line of lines) {
+                const t = line.trim();
+                if(t.toUpperCase().startsWith('#NEXTSONG')) {
+                    if(!isFirst) {
+                        // 前のセクションが終わった -> ここでタイトル解析したいが、
+                        // タグの中にタイトルがあるので、タグが見つかった時点でカウントできる
+                    }
+                    songCount++;
+                    currentTag = t;
+                    
+                    // Args解析
+                    const args = parseNextSongArgs(currentTag);
+                    const title = args[0] || `Song ${songCount}`;
+                    
+                    // UI生成
+                    createSongCheckbox(songCount, title);
+                    isFirst = false;
+                }
+            }
+            
+            if(songCount > 0) {
+                hiddenSettings.style.display = 'block';
+                log(`${songCount} 曲を検出しました。隠し曲設定が可能です。`, 'info');
+            }
+
+        } catch(e) {
+            log(`プレビュー解析エラー: ${e.message}`, 'warn');
+        }
+    }
+
+    function createSongCheckbox(index, title) {
+        const div = document.createElement('div');
+        div.className = 'song-option';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `check-hidden-${index}`;
+        checkbox.value = 'true';
+        
+        const label = document.createElement('label');
+        label.htmlFor = `check-hidden-${index}`;
+        label.textContent = `${index}曲目: ${title}`;
+        
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        songListContainer.appendChild(div);
+    }
+
 
     // --- Main Process ---
     runBtn.addEventListener('click', async () => {
@@ -201,20 +317,15 @@
 
     async function processTaikoNautsConversion() {
         const zip = new JSZip();
-
-        // 1. Read File
         const text = await readFileContent(targetTjaFile);
         const lines = text.split(/\r?\n/);
         
-        // 2. Sections Split (#NEXTSONG handling)
         let sections = [];
         let buffer = [];
         let nextTag = "";
         
-        // BOM removal
         if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
 
-        // First pass to split sections
         for (let line of lines) {
             if (line.trim().toUpperCase().startsWith('#NEXTSONG')) {
                 sections.push({ lines: buffer, tag: nextTag });
@@ -226,15 +337,11 @@
         }
         sections.push({ lines: buffer, tag: nextTag });
 
-        // 3. Metadata & Exam Parsing Strategy
-        //  - 0番目(Intro)にあるEXAM = 「共通条件（合計）」
-        //  - 1番目以降(各曲)にあるEXAM = 「個別条件」
-        
+        // Metadata & Exam Parsing
         let danTitle = "段位";
-        let globalExam = { gauge: null, conditions: {} }; // 共通条件格納
-        let songExams = []; // 各曲の個別条件格納配列 (index 0は空)
+        let globalExam = { gauge: null, conditions: {} }; 
+        let songExams = []; 
 
-        // Intro (Section 0) Analysis
         if (sections.length > 0) {
             sections[0].lines.forEach(l => {
                 const line = l.trim();
@@ -245,19 +352,17 @@
                     const parsed = parseExamLine(line);
                     if (parsed) {
                         if (parsed.isGauge) globalExam.gauge = parsed.val;
-                        else globalExam.conditions[parsed.type] = parsed.val; // 上書き保存
+                        else globalExam.conditions[parsed.type] = parsed.val; 
                     }
                 }
             });
         }
         log(`解析: タイトル[${danTitle}]`, 'info');
 
-        // 4. Songs Processing
         let danSongs = [];
         let currentBpm = 0;
         let balloonCursor = 0;
         
-        // Balloon Loading
         let globalBalloons = [];
         let tempBalloonStr = "";
         lines.forEach(l => {
@@ -267,7 +372,6 @@
             globalBalloons = tempBalloonStr.split(/[,、\s]+/).map(n => parseInt(n)).filter(n => !isNaN(n));
         }
 
-        // Intro BPM & Balloon skip
         if (sections.length > 0) {
             sections[0].lines.forEach(l => {
                 if(l.trim().toUpperCase().startsWith('BPM:')) currentBpm = parseFloat(l.split(':')[1]);
@@ -275,15 +379,13 @@
             balloonCursor += count79(sections[0].lines);
         }
 
-        // Create Zip Folder
         const rootFolder = zip.folder(danTitle);
 
-        // Process each song (Index 1 to End)
+        // Process Songs (Index 1 to End)
         for (let i = 1; i < sections.length; i++) {
             const section = sections[i];
             const args = parseNextSongArgs(section.tag);
 
-            // Metadata
             const title = args[0] || `Song_${i}`;
             let subTitle = args[1] === "--" ? "" : (args[1] || "");
             const genre = args[2] || "バラエティ";
@@ -300,8 +402,8 @@
                 level = args[6];
             }
 
-            // --- Individual EXAM Parsing (この曲用の条件を探す) ---
-            let myExam = {}; // { "Good": {red:10, gold:5}, ... }
+            // EXAM Parsing
+            let myExam = {}; 
             section.lines.forEach(l => {
                 const t = l.trim();
                 if (t.toUpperCase().startsWith('EXAM')) {
@@ -311,7 +413,7 @@
                     }
                 }
             });
-            songExams[i] = myExam; // 保存
+            songExams[i] = myExam;
 
             // Balloon
             const needed = count79(section.lines);
@@ -321,12 +423,11 @@
                 else myBalloons.push(5);
             }
 
-            // Body Cleanup
+            // Body
             let bodyLines = [];
             let totalDelay = 0;
             section.lines.forEach(l => {
                 const t = l.trim().toUpperCase();
-                // 共通削除: EXAM, LEVELHOLD, SECTION, START, END, BALLOON
                 if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
                     t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:')) return;
                 
@@ -342,7 +443,7 @@
                 bodyLines.push(l);
             });
 
-            // Write TJA
+            // TJA Output
             let outLines = [];
             outLines.push(`TITLE:${title}`);
             if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
@@ -362,28 +463,29 @@
             if (outLines[outLines.length-1].trim() !== "") outLines.push("");
             outLines.push('#END');
 
-            const fileName = `${i}.tja`; // 1.tja, 2.tja...
+            const fileName = `${i}.tja`;
             rootFolder.file(fileName, outLines.join('\r\n'));
 
             if (wave) {
                 const wName = wave.split(/[/\\]/).pop();
                 if (fileMap.has(wName)) rootFolder.file(wName, fileMap.get(wName));
-                else log(`[警告] 音源なし: ${wName}`, 'warn');
             }
 
-            // JSON用データ
+            // ★ isHidden判定
+            // UI上のチェックボックスの状態を取得
+            const checkEl = document.getElementById(`check-hidden-${i}`);
+            const isHidden = checkEl ? checkEl.checked : false;
+
+            // JSON list
             danSongs.push({
-                path: fileName, // ここで自動的に "1.tja" 等を指定
+                path: fileName,
                 difficulty: mapCourseToInt(courseStr),
                 genre: genre,
-                isHidden: false
+                isHidden: isHidden // ★ここへ反映
             });
         }
 
-        // 5. Build Final JSON Conditions
-        // 全ての既知の条件タイプについて、
-        // 「個別指定が1つでもあるか？」を確認し、あれば配列形式、なければ単一形式で出力
-        
+        // Build Final JSON Conditions
         let finalConditions = [];
         const allTypes = new Set([
             ...Object.keys(globalExam.conditions),
@@ -391,7 +493,6 @@
         ]);
 
         allTypes.forEach(type => {
-            // このタイプについて、個別指定があるかチェック
             let hasIndividual = false;
             for(let i=1; i<sections.length; i++) {
                 if(songExams[i] && songExams[i][type]) {
@@ -401,28 +502,21 @@
             }
 
             if (hasIndividual) {
-                // 個別条件モード (配列数 = 曲数)
                 let thresholdArr = [];
                 for(let i=1; i<sections.length; i++) {
-                    // その曲に条件があればそれを使用、なければ共通条件を使用、それもなければ0
                     let val = (songExams[i] && songExams[i][type]) 
                               ? songExams[i][type] 
                               : (globalExam.conditions[type] || {red:0, gold:0});
                     thresholdArr.push(val);
                 }
                 finalConditions.push({ type: type, threshold: thresholdArr });
-                log(`条件[${type}]: 個別設定として出力`, 'ok');
             } else {
-                // 共通条件モード (配列数 = 1)
-                // グローバルの値を使用
                 if (globalExam.conditions[type]) {
                     finalConditions.push({ type: type, threshold: [ globalExam.conditions[type] ] });
-                    log(`条件[${type}]: 共通設定として出力`, 'info');
                 }
             }
         });
 
-        // 6. Generate dan.json
         const danJson = {
             title: danTitle,
             danIndex: 0,
@@ -433,7 +527,6 @@
         };
         rootFolder.file("dan.json", JSON.stringify(danJson, null, 2));
 
-        // 7. Download
         const content = await zip.generateAsync({type:"blob"});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
@@ -445,8 +538,6 @@
     }
 
     // --- Helper Functions ---
-
-    // 1行のEXAMを解析してオブジェクトを返す { type: "Good", val: {red:10, gold:5}, isGauge: false }
     function parseExamLine(line) {
         let content = line.replace(/^EXAM\d*[:\s]*/i, '').trim();
         const parts = content.split(/,\s*/);
