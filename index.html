@@ -3,7 +3,7 @@
 <head>
     <meta charset="Shift_JIS">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaikoNauts 変換ツール (フォルダ名対応版)</title>
+    <title>TaikoNauts 変換ツール (タイトル編集機能付き)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root {
@@ -102,13 +102,18 @@
             color: #7f8c8d;
             margin-top: 4px;
         }
-        select {
+        select, input[type="text"] {
             width: 100%;
             padding: 10px;
             border-radius: 6px;
             border: 1px solid #bdc3c7;
             font-size: 1rem;
             background: white;
+            box-sizing: border-box; /* パディングを含める */
+        }
+        input[type="text"]:focus, select:focus {
+            border-color: var(--primary);
+            outline: none;
         }
         
         .song-option {
@@ -171,7 +176,7 @@
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">ランク指定・隠し曲・個別条件解析など全機能対応版</div>
+    <div class="subtitle">Ver. Beta Final - ランク・名称変更・隠し曲対応</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -182,8 +187,8 @@
     <div id="settings-area">
         
         <div class="form-group">
-            <label class="form-label">段位ランクを選択</label>
-            <div class="form-note">TaikoNautsでの表示順を決めるため、フォルダ名の先頭に番号が付与されます。</div>
+            <label class="form-label">① 段位ランクを選択</label>
+            <div class="form-note">フォルダ名の先頭に付く番号を決定します。</div>
             <select id="rank-select">
                 <optgroup label="級位 (1-5)">
                     <option value="1">五級 (1)</option>
@@ -216,10 +221,16 @@
             </select>
         </div>
 
+        <div class="form-group">
+            <label class="form-label">② 段位タイトル (フォルダ名)</label>
+            <div class="form-note">ここに入力した名前がフォルダ名とJSONに反映されます。(例: ブルー達人！)</div>
+            <input type="text" id="dan-title-input" placeholder="段位名を入力">
+        </div>
+
         <hr style="border:0; border-top:1px solid #ddd; margin: 20px 0;">
 
         <div class="form-group">
-            <label class="form-label">隠し曲設定 (タイトルを ??? にする)</label>
+            <label class="form-label">③ 隠し曲設定 (タイトルを ??? にする)</label>
             <div id="song-list-container"></div>
         </div>
     </div>
@@ -239,6 +250,7 @@
     const settingsArea = document.getElementById('settings-area');
     const songListContainer = document.getElementById('song-list-container');
     const rankSelect = document.getElementById('rank-select');
+    const danTitleInput = document.getElementById('dan-title-input');
 
     let targetTjaFile = null;
     let fileMap = new Map();
@@ -272,6 +284,7 @@
         // UI初期化
         settingsArea.style.display = 'none';
         songListContainer.innerHTML = '';
+        danTitleInput.value = '';
 
         const fileList = Array.from(files);
         let tjaCount = 0;
@@ -290,7 +303,7 @@
             if (tjaCount > 1) log(`注意: 複数のTJAがあります。${targetTjaFile.name} を優先します。`, 'warn');
             
             // スキャン実行
-            await scanSongsForHiddenSetting(targetTjaFile);
+            await scanSongsAndTitle(targetTjaFile);
 
             runBtn.classList.add('active');
         } else {
@@ -298,38 +311,44 @@
         }
     }
 
-    // --- Pre-Scan for UI ---
-    async function scanSongsForHiddenSetting(file) {
+    // --- Pre-Scan for UI (Songs + Title) ---
+    async function scanSongsAndTitle(file) {
         try {
             const text = await readFileContent(file);
             const lines = text.split(/\r?\n/);
             
             let songCount = 0;
             let currentTag = "";
-            let isFirst = true;
+            let foundTitle = "";
 
             // BOM削除
             if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
 
             for(let line of lines) {
                 const t = line.trim();
+                
+                // タイトルの取得 (最初のTITLE:を拾う)
+                if(!foundTitle && t.toUpperCase().startsWith('TITLE:')) {
+                    foundTitle = t.substring(6).trim();
+                }
+
                 if(t.toUpperCase().startsWith('#NEXTSONG')) {
                     songCount++;
                     currentTag = t;
                     const args = parseNextSongArgs(currentTag);
                     const title = args[0] || `Song ${songCount}`;
                     createSongCheckbox(songCount, title);
-                    isFirst = false;
                 }
             }
             
+            // UI反映
+            settingsArea.style.display = 'block';
+            danTitleInput.value = foundTitle || "新規段位"; // デフォルト値設定
+
             if(songCount > 0) {
-                settingsArea.style.display = 'block';
-                log(`${songCount} 曲を検出。ランクと隠し曲を設定してください。`, 'info');
+                log(`${songCount} 曲を検出。詳細を設定してください。`, 'info');
             } else {
-                // 1曲もない(NEXTSONGがない)場合でもランク指定は必要なので表示
-                settingsArea.style.display = 'block';
-                log(`曲分割タグ未検出。単曲段位として処理します。`, 'warn');
+                log(`曲分割タグ未検出。`, 'warn');
             }
 
         } catch(e) {
@@ -382,9 +401,11 @@
         const text = await readFileContent(targetTjaFile);
         const lines = text.split(/\r?\n/);
         
-        // ★ランク取得 (フォルダ名用)
-        const rankValue = parseInt(rankSelect.value); // 1~20
-        log(`選択ランクID: ${rankValue}`, 'info');
+        // ★ユーザー設定値の取得
+        const rankValue = parseInt(rankSelect.value); // 例: 19
+        const userTitle = danTitleInput.value.trim() || "段位"; // 例: ブルー達人！
+        
+        log(`設定: [${rankValue}] ${userTitle}`, 'info');
 
         let sections = [];
         let buffer = [];
@@ -403,17 +424,14 @@
         }
         sections.push({ lines: buffer, tag: nextTag });
 
-        // Metadata & Exam Parsing
-        let danTitle = "段位";
+        // Exam Parsing
         let globalExam = { gauge: null, conditions: {} }; 
         let songExams = []; 
 
         if (sections.length > 0) {
             sections[0].lines.forEach(l => {
                 const line = l.trim();
-                if (line.toUpperCase().startsWith('TITLE:')) {
-                    danTitle = line.substring(6).trim();
-                }
+                // ※TITLE解析は入力欄を使うのでスキップ
                 if (line.toUpperCase().startsWith('EXAM')) {
                     const parsed = parseExamLine(line);
                     if (parsed) {
@@ -424,9 +442,9 @@
             });
         }
         
-        // ★フォルダ名を決定 (例: "19 達人(全良)")
-        const outputFolderName = `${rankValue} ${danTitle}`;
-        log(`出力フォルダ名: ${outputFolderName}`, 'info');
+        // ★出力フォルダ名の決定: "[ランク番号] [入力されたタイトル]"
+        const outputFolderName = `${rankValue} ${userTitle}`;
+        log(`出力フォルダ: ${outputFolderName}`, 'info');
         const rootFolder = zip.folder(outputFolderName);
 
         let danSongs = [];
@@ -449,7 +467,7 @@
             balloonCursor += count79(sections[0].lines);
         }
 
-        // Process Songs (Index 1 to End)
+        // Process Songs
         for (let i = 1; i < sections.length; i++) {
             const section = sections[i];
             const args = parseNextSongArgs(section.tag);
@@ -497,7 +515,7 @@
             section.lines.forEach(l => {
                 const t = l.trim().toUpperCase();
                 if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
-                    t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:')) return;
+                    t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:') || t.startsWith('TITLE:')) return;
                 
                 if (t.startsWith('#DELAY')) {
                     const val = parseFloat(l.trim().split(/\s+/)[1]);
@@ -551,7 +569,7 @@
             });
         }
 
-        // Build Final JSON Conditions
+        // Build Final JSON
         let finalConditions = [];
         const allTypes = new Set([
             ...Object.keys(globalExam.conditions),
@@ -584,8 +602,8 @@
         });
 
         const danJson = {
-            title: danTitle,
-            danIndex: 0, // ★JSON内では0固定 (仕様不明のため安全策)
+            title: userTitle, // ★JSONのタイトルもユーザー入力値を使用
+            danIndex: 0,
             danPlatePath: "Plate.png",
             danSongs: danSongs,
             conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
@@ -596,7 +614,8 @@
         const content = await zip.generateAsync({type:"blob"});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
-        link.download = `TaikoNauts_${rankValue}_${danTitle}.zip`;
+        // ZIPファイル名にも入力された名前を使用
+        link.download = `TaikoNauts_${rankValue}_${userTitle}.zip`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
