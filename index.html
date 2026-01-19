@@ -3,7 +3,7 @@
 <head>
     <meta charset="Shift_JIS">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaikoNauts 変換・分割統合ツール</title>
+    <title>TaikoNauts 変換ツール (個別条件対応版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root {
@@ -42,6 +42,15 @@
             color: #7f8c8d;
             margin-bottom: 30px;
             font-size: 0.9rem;
+        }
+        .tag {
+            background: #2ecc71;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            vertical-align: middle;
+            margin-left: 5px;
         }
         .box {
             border: 2px dashed #bdc3c7;
@@ -97,8 +106,8 @@
 <body>
 
 <div class="container">
-    <h1>TaikoNauts 変換・分割統合ツール</h1>
-    <div class="subtitle">OpenTaiko/TNDE形式の段位TJAを、TaikoNauts用(分割tja + dan.json)に一括変換</div>
+    <h1>TaikoNauts 変換ツール <span class="tag">個別条件対応</span></h1>
+    <div class="subtitle">曲ごとの個別条件(OpenTaiko形式)も自動解析し、dan.jsonを生成します</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -197,35 +206,15 @@
         const text = await readFileContent(targetTjaFile);
         const lines = text.split(/\r?\n/);
         
-        // 2. Extract Global Info (Title & Exam) using robust parsing
-        let danTitle = "段位";
-        const examData = { gauge: null, conditions: [] };
-
-        lines.forEach(l => {
-            const line = l.trim();
-            if (line.toUpperCase().startsWith('TITLE:')) {
-                danTitle = line.substring(6).trim();
-            }
-            // EXAM Parsing (Logic inspired by dantja2json)
-            if (line.toUpperCase().startsWith('EXAM')) {
-                parseRobustExam(line, examData);
-            }
-        });
-
-        log(`解析完了: タイトル[${danTitle}]`, 'info');
-        log(`合格条件数: ${examData.conditions.length}`, 'info');
-
-        // 3. Create Root Folder
-        const rootFolder = zip.folder(danTitle);
-
-        // 4. Split Sections
+        // 2. Sections Split (#NEXTSONG handling)
         let sections = [];
         let buffer = [];
         let nextTag = "";
         
-        // BOM removal if exists
+        // BOM removal
         if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
 
+        // First pass to split sections
         for (let line of lines) {
             if (line.trim().toUpperCase().startsWith('#NEXTSONG')) {
                 sections.push({ lines: buffer, tag: nextTag });
@@ -237,12 +226,38 @@
         }
         sections.push({ lines: buffer, tag: nextTag });
 
-        // 5. Process Songs & Build JSON list
+        // 3. Metadata & Exam Parsing Strategy
+        //  - 0番目(Intro)にあるEXAM = 「共通条件（合計）」
+        //  - 1番目以降(各曲)にあるEXAM = 「個別条件」
+        
+        let danTitle = "段位";
+        let globalExam = { gauge: null, conditions: {} }; // 共通条件格納
+        let songExams = []; // 各曲の個別条件格納配列 (index 0は空)
+
+        // Intro (Section 0) Analysis
+        if (sections.length > 0) {
+            sections[0].lines.forEach(l => {
+                const line = l.trim();
+                if (line.toUpperCase().startsWith('TITLE:')) {
+                    danTitle = line.substring(6).trim();
+                }
+                if (line.toUpperCase().startsWith('EXAM')) {
+                    const parsed = parseExamLine(line);
+                    if (parsed) {
+                        if (parsed.isGauge) globalExam.gauge = parsed.val;
+                        else globalExam.conditions[parsed.type] = parsed.val; // 上書き保存
+                    }
+                }
+            });
+        }
+        log(`解析: タイトル[${danTitle}]`, 'info');
+
+        // 4. Songs Processing
         let danSongs = [];
         let currentBpm = 0;
         let balloonCursor = 0;
         
-        // Load global balloons
+        // Balloon Loading
         let globalBalloons = [];
         let tempBalloonStr = "";
         lines.forEach(l => {
@@ -252,7 +267,7 @@
             globalBalloons = tempBalloonStr.split(/[,、\s]+/).map(n => parseInt(n)).filter(n => !isNaN(n));
         }
 
-        // Intro (index 0)
+        // Intro BPM & Balloon skip
         if (sections.length > 0) {
             sections[0].lines.forEach(l => {
                 if(l.trim().toUpperCase().startsWith('BPM:')) currentBpm = parseFloat(l.split(':')[1]);
@@ -260,7 +275,10 @@
             balloonCursor += count79(sections[0].lines);
         }
 
-        // Songs (index 1+)
+        // Create Zip Folder
+        const rootFolder = zip.folder(danTitle);
+
+        // Process each song (Index 1 to End)
         for (let i = 1; i < sections.length; i++) {
             const section = sections[i];
             const args = parseNextSongArgs(section.tag);
@@ -273,7 +291,6 @@
             const scoreInit = args[4] || "0";
             const scoreDiff = args[5] || "0";
 
-            // Difficulty Parsing
             let courseStr = "Oni";
             let level = "10";
             if (args.length >= 8) {
@@ -283,7 +300,20 @@
                 level = args[6];
             }
 
-            // Balloon Allocation
+            // --- Individual EXAM Parsing (この曲用の条件を探す) ---
+            let myExam = {}; // { "Good": {red:10, gold:5}, ... }
+            section.lines.forEach(l => {
+                const t = l.trim();
+                if (t.toUpperCase().startsWith('EXAM')) {
+                    const parsed = parseExamLine(t);
+                    if (parsed && !parsed.isGauge) {
+                        myExam[parsed.type] = parsed.val;
+                    }
+                }
+            });
+            songExams[i] = myExam; // 保存
+
+            // Balloon
             const needed = count79(section.lines);
             let myBalloons = [];
             for (let k = 0; k < needed; k++) {
@@ -291,22 +321,20 @@
                 else myBalloons.push(5);
             }
 
-            // Body Construction & Cleanup
+            // Body Cleanup
             let bodyLines = [];
             let totalDelay = 0;
             section.lines.forEach(l => {
                 const t = l.trim().toUpperCase();
-                // Remove commands not needed for single play
+                // 共通削除: EXAM, LEVELHOLD, SECTION, START, END, BALLOON
                 if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
                     t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:')) return;
                 
-                // Delay -> Offset
                 if (t.startsWith('#DELAY')) {
                     const val = parseFloat(l.trim().split(/\s+/)[1]);
                     if (!isNaN(val)) totalDelay += val;
                     return;
                 }
-                // BPM tracking
                 if (t.startsWith('#BPMCHANGE')) {
                     const parts = l.trim().split(/\s+/);
                     if (parts[1]) currentBpm = parseFloat(parts[1]);
@@ -314,7 +342,7 @@
                 bodyLines.push(l);
             });
 
-            // Build Output TJA
+            // Write TJA
             let outLines = [];
             outLines.push(`TITLE:${title}`);
             if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
@@ -334,33 +362,74 @@
             if (outLines[outLines.length-1].trim() !== "") outLines.push("");
             outLines.push('#END');
 
-            const fileName = `${i}.tja`;
+            const fileName = `${i}.tja`; // 1.tja, 2.tja...
             rootFolder.file(fileName, outLines.join('\r\n'));
 
-            // Bundle Audio
             if (wave) {
                 const wName = wave.split(/[/\\]/).pop();
                 if (fileMap.has(wName)) rootFolder.file(wName, fileMap.get(wName));
-                else log(`[警告] 音源が見つかりません: ${wName}`, 'warn');
+                else log(`[警告] 音源なし: ${wName}`, 'warn');
             }
 
-            // Add to JSON list
+            // JSON用データ
             danSongs.push({
-                path: fileName,
+                path: fileName, // ここで自動的に "1.tja" 等を指定
                 difficulty: mapCourseToInt(courseStr),
                 genre: genre,
                 isHidden: false
             });
         }
 
-        // 6. Generate dan.json (using TaikoNauts format)
+        // 5. Build Final JSON Conditions
+        // 全ての既知の条件タイプについて、
+        // 「個別指定が1つでもあるか？」を確認し、あれば配列形式、なければ単一形式で出力
+        
+        let finalConditions = [];
+        const allTypes = new Set([
+            ...Object.keys(globalExam.conditions),
+            ...songExams.flatMap(e => e ? Object.keys(e) : [])
+        ]);
+
+        allTypes.forEach(type => {
+            // このタイプについて、個別指定があるかチェック
+            let hasIndividual = false;
+            for(let i=1; i<sections.length; i++) {
+                if(songExams[i] && songExams[i][type]) {
+                    hasIndividual = true;
+                    break;
+                }
+            }
+
+            if (hasIndividual) {
+                // 個別条件モード (配列数 = 曲数)
+                let thresholdArr = [];
+                for(let i=1; i<sections.length; i++) {
+                    // その曲に条件があればそれを使用、なければ共通条件を使用、それもなければ0
+                    let val = (songExams[i] && songExams[i][type]) 
+                              ? songExams[i][type] 
+                              : (globalExam.conditions[type] || {red:0, gold:0});
+                    thresholdArr.push(val);
+                }
+                finalConditions.push({ type: type, threshold: thresholdArr });
+                log(`条件[${type}]: 個別設定として出力`, 'ok');
+            } else {
+                // 共通条件モード (配列数 = 1)
+                // グローバルの値を使用
+                if (globalExam.conditions[type]) {
+                    finalConditions.push({ type: type, threshold: [ globalExam.conditions[type] ] });
+                    log(`条件[${type}]: 共通設定として出力`, 'info');
+                }
+            }
+        });
+
+        // 6. Generate dan.json
         const danJson = {
             title: danTitle,
             danIndex: 0,
             danPlatePath: "Plate.png",
             danSongs: danSongs,
-            conditionGauge: examData.gauge || { red: 80, gold: 100 },
-            conditions: examData.conditions
+            conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
+            conditions: finalConditions
         };
         rootFolder.file("dan.json", JSON.stringify(danJson, null, 2));
 
@@ -372,68 +441,40 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        log("変換・生成完了。ダウンロードを開始しました。", 'ok');
+        log("全処理完了。ダウンロードを開始しました。", 'ok');
     }
 
     // --- Helper Functions ---
 
-    // dantja2json Logic Implementation
-    function parseRobustExam(line, data) {
-        // Remove EXAM prefix
+    // 1行のEXAMを解析してオブジェクトを返す { type: "Good", val: {red:10, gold:5}, isGauge: false }
+    function parseExamLine(line) {
         let content = line.replace(/^EXAM\d*[:\s]*/i, '').trim();
-        
-        // Regex to split by comma but respecting parts
-        // Simple split by comma is usually enough for TJA format
         const parts = content.split(/,\s*/);
-        if (parts.length < 3) return;
+        if (parts.length < 2) return null;
 
         const typeRaw = parts[0].toLowerCase();
         const red = parseFloat(parts[1]);
-        const gold = parseFloat(parts[2]); // Can be undefined/NaN if not present
+        const gold = parseFloat(parts[2]); 
 
-        if (isNaN(red)) return; // Minimum requirement
+        if (isNaN(red)) return null;
+        const valObj = { red: red, gold: isNaN(gold) ? red : gold };
 
-        // 1. Gauge Check
         if (['g', 'gauge'].includes(typeRaw)) {
-            data.gauge = { red: red, gold: isNaN(gold) ? 100 : gold };
-            return;
+            return { type: 'Gauge', val: valObj, isGauge: true };
         }
 
-        // 2. Condition Mapping (Based on dantja2json logic)
         let typeName = "";
-        
-        // Great / Perfect
         if (['p', 'jp', 'perfect', 'judge_p', 'gr'].includes(typeRaw)) typeName = "Great";
-        // Good
         else if (['g', 'jg', 'good', 'judge_g', 'gd'].includes(typeRaw)) typeName = "Good";
-        // Miss / Bad
         else if (['b', 'jb', 'bad', 'miss', 'judge_b'].includes(typeRaw)) typeName = "Miss";
-        // Roll
         else if (['r', 'jr', 'roll', 'judge_r'].includes(typeRaw)) typeName = "Roll";
-        // Hit
         else if (['h', 'jh', 'hit', 'judge_h'].includes(typeRaw)) typeName = "Hit";
-        // Combo
         else if (['c', 'jc', 'combo'].includes(typeRaw)) typeName = "MaxCombo";
-        // Score
         else if (['s', 'js', 'score'].includes(typeRaw)) typeName = "Score";
-        // ADLIB (Rare but supported in some forks)
         else if (['a', 'adlib'].includes(typeRaw)) typeName = "ADLIB";
 
-        if (typeName) {
-            const thresholdObj = { red: red, gold: isNaN(gold) ? red : gold };
-            
-            // Check if type already exists
-            const existing = data.conditions.find(c => c.type === typeName);
-            if (existing) {
-                // TaikoNauts uses single threshold for total, overwrite is safer for consistency
-                existing.threshold[0] = thresholdObj; 
-            } else {
-                data.conditions.push({
-                    type: typeName,
-                    threshold: [ thresholdObj ]
-                });
-            }
-        }
+        if (!typeName) return null;
+        return { type: typeName, val: valObj, isGauge: false };
     }
 
     function readFileContent(file) {
