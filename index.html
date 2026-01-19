@@ -3,7 +3,7 @@
 <head>
     <meta charset="Shift_JIS">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaikoNauts 変換ツール (隠し曲設定対応)</title>
+    <title>TaikoNauts 変換ツール (フォルダ名対応版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root {
@@ -67,9 +67,9 @@
         }
         .box p { margin: 0; font-size: 1.1rem; color: #7f8c8d; }
         
-        /* 隠し曲設定エリア */
-        #hidden-settings {
-            display: none; /* 初期状態は非表示 */
+        /* 設定エリア */
+        #settings-area {
+            display: none;
             margin-top: 25px;
             padding: 20px;
             background: #f8f9fa;
@@ -77,15 +77,42 @@
             border-radius: 8px;
             text-align: left;
         }
-        #hidden-settings h3 {
+        #settings-area h3 {
             margin-top: 0;
             font-size: 1rem;
             color: #2c3e50;
             border-bottom: 1px solid #ddd;
             padding-bottom: 8px;
+            margin-bottom: 15px;
         }
+        
+        /* フォーム要素 */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            color: #34495e;
+        }
+        .form-note {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-top: 4px;
+        }
+        select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #bdc3c7;
+            font-size: 1rem;
+            background: white;
+        }
+        
         .song-option {
-            margin: 10px 0;
+            margin: 8px 0;
             padding: 8px;
             background: white;
             border-radius: 4px;
@@ -143,8 +170,8 @@
 <body>
 
 <div class="container">
-    <h1>TaikoNauts 変換ツール <span class="tag">隠し曲対応</span></h1>
-    <div class="subtitle">OpenTaiko形式のTJAを変換し、隠し曲(???)設定や個別条件を反映します</div>
+    <h1>TaikoNauts 変換ツール</h1>
+    <div class="subtitle">ランク指定・隠し曲・個別条件解析など全機能対応版</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -152,10 +179,49 @@
     </div>
     <div id="status" style="text-align:center; margin-top:15px; font-weight:bold;"></div>
 
-    <div id="hidden-settings">
-        <h3>隠し曲設定 (isHidden)</h3>
-        <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">チェックを入れた曲は、段位選択画面でタイトルが「???」になります。</p>
-        <div id="song-list-container"></div>
+    <div id="settings-area">
+        
+        <div class="form-group">
+            <label class="form-label">段位ランクを選択</label>
+            <div class="form-note">TaikoNautsでの表示順を決めるため、フォルダ名の先頭に番号が付与されます。</div>
+            <select id="rank-select">
+                <optgroup label="級位 (1-5)">
+                    <option value="1">五級 (1)</option>
+                    <option value="2">四級 (2)</option>
+                    <option value="3">三級 (3)</option>
+                    <option value="4">二級 (4)</option>
+                    <option value="5">一級 (5)</option>
+                </optgroup>
+                <optgroup label="段位 (6-15)">
+                    <option value="6" selected>初段 (6)</option>
+                    <option value="7">二段 (7)</option>
+                    <option value="8">三段 (8)</option>
+                    <option value="9">四段 (9)</option>
+                    <option value="10">五段 (10)</option>
+                    <option value="11">六段 (11)</option>
+                    <option value="12">七段 (12)</option>
+                    <option value="13">八段 (13)</option>
+                    <option value="14">九段 (14)</option>
+                    <option value="15">十段 (15)</option>
+                </optgroup>
+                <optgroup label="高難易度 (16-19)">
+                    <option value="16">玄人 (16)</option>
+                    <option value="17">名人 (17)</option>
+                    <option value="18">超人 (18)</option>
+                    <option value="19">達人 (19)</option>
+                </optgroup>
+                <optgroup label="その他">
+                    <option value="20">外伝 (20)</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <hr style="border:0; border-top:1px solid #ddd; margin: 20px 0;">
+
+        <div class="form-group">
+            <label class="form-label">隠し曲設定 (タイトルを ??? にする)</label>
+            <div id="song-list-container"></div>
+        </div>
     </div>
 
     <button id="runBtn">変換開始</button>
@@ -170,8 +236,9 @@
     const runBtn = document.getElementById('runBtn');
     const logArea = document.getElementById('log');
     const statusDiv = document.getElementById('status');
-    const hiddenSettings = document.getElementById('hidden-settings');
+    const settingsArea = document.getElementById('settings-area');
     const songListContainer = document.getElementById('song-list-container');
+    const rankSelect = document.getElementById('rank-select');
 
     let targetTjaFile = null;
     let fileMap = new Map();
@@ -203,7 +270,7 @@
         runBtn.classList.remove('active');
         
         // UI初期化
-        hiddenSettings.style.display = 'none';
+        settingsArea.style.display = 'none';
         songListContainer.innerHTML = '';
 
         const fileList = Array.from(files);
@@ -222,7 +289,7 @@
             log(`TJAファイルを検出: ${targetTjaFile.name}`, 'ok');
             if (tjaCount > 1) log(`注意: 複数のTJAがあります。${targetTjaFile.name} を優先します。`, 'warn');
             
-            // ★ここでファイルを先行スキャンして、隠し曲設定用のUIを作る
+            // スキャン実行
             await scanSongsForHiddenSetting(targetTjaFile);
 
             runBtn.classList.add('active');
@@ -231,13 +298,12 @@
         }
     }
 
-    // --- Pre-Scan Function for UI ---
+    // --- Pre-Scan for UI ---
     async function scanSongsForHiddenSetting(file) {
         try {
             const text = await readFileContent(file);
             const lines = text.split(/\r?\n/);
             
-            // 簡易的に#NEXTSONGで分割してタイトルを取得
             let songCount = 0;
             let currentTag = "";
             let isFirst = true;
@@ -248,30 +314,26 @@
             for(let line of lines) {
                 const t = line.trim();
                 if(t.toUpperCase().startsWith('#NEXTSONG')) {
-                    if(!isFirst) {
-                        // 前のセクションが終わった -> ここでタイトル解析したいが、
-                        // タグの中にタイトルがあるので、タグが見つかった時点でカウントできる
-                    }
                     songCount++;
                     currentTag = t;
-                    
-                    // Args解析
                     const args = parseNextSongArgs(currentTag);
                     const title = args[0] || `Song ${songCount}`;
-                    
-                    // UI生成
                     createSongCheckbox(songCount, title);
                     isFirst = false;
                 }
             }
             
             if(songCount > 0) {
-                hiddenSettings.style.display = 'block';
-                log(`${songCount} 曲を検出しました。隠し曲設定が可能です。`, 'info');
+                settingsArea.style.display = 'block';
+                log(`${songCount} 曲を検出。ランクと隠し曲を設定してください。`, 'info');
+            } else {
+                // 1曲もない(NEXTSONGがない)場合でもランク指定は必要なので表示
+                settingsArea.style.display = 'block';
+                log(`曲分割タグ未検出。単曲段位として処理します。`, 'warn');
             }
 
         } catch(e) {
-            log(`プレビュー解析エラー: ${e.message}`, 'warn');
+            log(`解析エラー: ${e.message}`, 'warn');
         }
     }
 
@@ -320,6 +382,10 @@
         const text = await readFileContent(targetTjaFile);
         const lines = text.split(/\r?\n/);
         
+        // ★ランク取得 (フォルダ名用)
+        const rankValue = parseInt(rankSelect.value); // 1~20
+        log(`選択ランクID: ${rankValue}`, 'info');
+
         let sections = [];
         let buffer = [];
         let nextTag = "";
@@ -357,7 +423,11 @@
                 }
             });
         }
-        log(`解析: タイトル[${danTitle}]`, 'info');
+        
+        // ★フォルダ名を決定 (例: "19 達人(全良)")
+        const outputFolderName = `${rankValue} ${danTitle}`;
+        log(`出力フォルダ名: ${outputFolderName}`, 'info');
+        const rootFolder = zip.folder(outputFolderName);
 
         let danSongs = [];
         let currentBpm = 0;
@@ -378,8 +448,6 @@
             });
             balloonCursor += count79(sections[0].lines);
         }
-
-        const rootFolder = zip.folder(danTitle);
 
         // Process Songs (Index 1 to End)
         for (let i = 1; i < sections.length; i++) {
@@ -471,17 +539,15 @@
                 if (fileMap.has(wName)) rootFolder.file(wName, fileMap.get(wName));
             }
 
-            // ★ isHidden判定
-            // UI上のチェックボックスの状態を取得
+            // isHidden Check
             const checkEl = document.getElementById(`check-hidden-${i}`);
             const isHidden = checkEl ? checkEl.checked : false;
 
-            // JSON list
             danSongs.push({
                 path: fileName,
                 difficulty: mapCourseToInt(courseStr),
                 genre: genre,
-                isHidden: isHidden // ★ここへ反映
+                isHidden: isHidden
             });
         }
 
@@ -519,7 +585,7 @@
 
         const danJson = {
             title: danTitle,
-            danIndex: 0,
+            danIndex: 0, // ★JSON内では0固定 (仕様不明のため安全策)
             danPlatePath: "Plate.png",
             danSongs: danSongs,
             conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
@@ -530,7 +596,7 @@
         const content = await zip.generateAsync({type:"blob"});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
-        link.download = `TaikoNauts_${danTitle}.zip`;
+        link.download = `TaikoNauts_${rankValue}_${danTitle}.zip`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
