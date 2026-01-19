@@ -3,7 +3,7 @@
 <head>
     <meta charset="Shift_JIS">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaikoNauts 変換ツール (タイトル編集機能付き)</title>
+    <title>TaikoNauts 変換ツール (Complete Edition)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root {
@@ -43,15 +43,6 @@
             margin-bottom: 30px;
             font-size: 0.9rem;
         }
-        .tag {
-            background: #e67e22;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            vertical-align: middle;
-            margin-left: 5px;
-        }
         .box {
             border: 2px dashed #bdc3c7;
             border-radius: 8px;
@@ -77,14 +68,6 @@
             border-radius: 8px;
             text-align: left;
         }
-        #settings-area h3 {
-            margin-top: 0;
-            font-size: 1rem;
-            color: #2c3e50;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 8px;
-            margin-bottom: 15px;
-        }
         
         /* フォーム要素 */
         .form-group {
@@ -109,7 +92,7 @@
             border: 1px solid #bdc3c7;
             font-size: 1rem;
             background: white;
-            box-sizing: border-box; /* パディングを含める */
+            box-sizing: border-box;
         }
         input[type="text"]:focus, select:focus {
             border-color: var(--primary);
@@ -176,7 +159,7 @@
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">Ver. Beta Final - ランク・名称変更・隠し曲対応</div>
+    <div class="subtitle">Complete Edition - 全機能搭載版</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -223,14 +206,22 @@
 
         <div class="form-group">
             <label class="form-label">② 段位タイトル (フォルダ名)</label>
-            <div class="form-note">ここに入力した名前がフォルダ名とJSONに反映されます。(例: ブルー達人！)</div>
+            <div class="form-note">ここに入力した名前がフォルダ名とJSONに反映されます。</div>
             <input type="text" id="dan-title-input" placeholder="段位名を入力">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">③ 段位プレート画像 (Dan_Plate)</label>
+            <div class="form-note">JSONの danPlatePath に設定し、ファイルを同梱します。</div>
+            <select id="plate-select">
+                <option value="">(画像が見つかりません)</option>
+            </select>
         </div>
 
         <hr style="border:0; border-top:1px solid #ddd; margin: 20px 0;">
 
         <div class="form-group">
-            <label class="form-label">③ 隠し曲設定 (タイトルを ??? にする)</label>
+            <label class="form-label">④ 隠し曲設定 (タイトルを ??? にする)</label>
             <div id="song-list-container"></div>
         </div>
     </div>
@@ -251,9 +242,11 @@
     const songListContainer = document.getElementById('song-list-container');
     const rankSelect = document.getElementById('rank-select');
     const danTitleInput = document.getElementById('dan-title-input');
+    const plateSelect = document.getElementById('plate-select');
 
     let targetTjaFile = null;
     let fileMap = new Map();
+    let detectedImages = [];
 
     // --- Logger ---
     function log(msg, type = '') {
@@ -277,6 +270,7 @@
     async function handleFiles(files) {
         fileMap.clear();
         targetTjaFile = null;
+        detectedImages = [];
         logArea.innerHTML = '';
         statusDiv.textContent = '';
         runBtn.classList.remove('active');
@@ -285,15 +279,21 @@
         settingsArea.style.display = 'none';
         songListContainer.innerHTML = '';
         danTitleInput.value = '';
+        plateSelect.innerHTML = '';
 
         const fileList = Array.from(files);
         let tjaCount = 0;
 
         fileList.forEach(f => {
             fileMap.set(f.name, f);
-            if (f.name.toLowerCase().endsWith('.tja')) {
+            const lowerName = f.name.toLowerCase();
+            if (lowerName.endsWith('.tja')) {
                 targetTjaFile = f;
                 tjaCount++;
+            }
+            // 画像検出
+            if (/\.(png|jpe?g|bmp|gif)$/i.test(lowerName)) {
+                detectedImages.push(f.name);
             }
         });
 
@@ -311,7 +311,7 @@
         }
     }
 
-    // --- Pre-Scan for UI (Songs + Title) ---
+    // --- Pre-Scan for UI (Songs + Title + Plate) ---
     async function scanSongsAndTitle(file) {
         try {
             const text = await readFileContent(file);
@@ -327,7 +327,7 @@
             for(let line of lines) {
                 const t = line.trim();
                 
-                // タイトルの取得 (最初のTITLE:を拾う)
+                // タイトルの取得
                 if(!foundTitle && t.toUpperCase().startsWith('TITLE:')) {
                     foundTitle = t.substring(6).trim();
                 }
@@ -343,7 +343,24 @@
             
             // UI反映
             settingsArea.style.display = 'block';
-            danTitleInput.value = foundTitle || "新規段位"; // デフォルト値設定
+            danTitleInput.value = foundTitle || "新規段位";
+
+            // プレート画像プルダウン生成
+            plateSelect.innerHTML = '';
+            if (detectedImages.length > 0) {
+                detectedImages.forEach(imgName => {
+                    const option = document.createElement('option');
+                    option.value = imgName;
+                    option.textContent = imgName;
+                    plateSelect.appendChild(option);
+                });
+                log(`${detectedImages.length} 枚の画像を検出。プレートとして選択可能です。`, 'info');
+            } else {
+                const option = document.createElement('option');
+                option.value = "";
+                option.textContent = "(画像なし) デフォルト: Plate.png";
+                plateSelect.appendChild(option);
+            }
 
             if(songCount > 0) {
                 log(`${songCount} 曲を検出。詳細を設定してください。`, 'info');
@@ -402,10 +419,12 @@
         const lines = text.split(/\r?\n/);
         
         // ★ユーザー設定値の取得
-        const rankValue = parseInt(rankSelect.value); // 例: 19
-        const userTitle = danTitleInput.value.trim() || "段位"; // 例: ブルー達人！
+        const rankValue = parseInt(rankSelect.value);
+        const userTitle = danTitleInput.value.trim() || "段位";
+        const selectedPlate = plateSelect.value;
         
         log(`設定: [${rankValue}] ${userTitle}`, 'info');
+        if(selectedPlate) log(`プレート画像: ${selectedPlate}`, 'info');
 
         let sections = [];
         let buffer = [];
@@ -431,7 +450,6 @@
         if (sections.length > 0) {
             sections[0].lines.forEach(l => {
                 const line = l.trim();
-                // ※TITLE解析は入力欄を使うのでスキップ
                 if (line.toUpperCase().startsWith('EXAM')) {
                     const parsed = parseExamLine(line);
                     if (parsed) {
@@ -442,9 +460,8 @@
             });
         }
         
-        // ★出力フォルダ名の決定: "[ランク番号] [入力されたタイトル]"
+        // 出力フォルダ作成
         const outputFolderName = `${rankValue} ${userTitle}`;
-        log(`出力フォルダ: ${outputFolderName}`, 'info');
         const rootFolder = zip.folder(outputFolderName);
 
         let danSongs = [];
@@ -552,6 +569,7 @@
             const fileName = `${i}.tja`;
             rootFolder.file(fileName, outLines.join('\r\n'));
 
+            // 音源コピー
             if (wave) {
                 const wName = wave.split(/[/\\]/).pop();
                 if (fileMap.has(wName)) rootFolder.file(wName, fileMap.get(wName));
@@ -601,10 +619,17 @@
             }
         });
 
+        // ★プレート画像の処理
+        let platePath = "Plate.png"; // デフォルト
+        if (selectedPlate && fileMap.has(selectedPlate)) {
+            platePath = selectedPlate;
+            rootFolder.file(selectedPlate, fileMap.get(selectedPlate)); // 画像ファイルをZIPに追加
+        }
+
         const danJson = {
-            title: userTitle, // ★JSONのタイトルもユーザー入力値を使用
+            title: userTitle,
             danIndex: 0,
-            danPlatePath: "Plate.png",
+            danPlatePath: platePath, // ★選択した画像名をJSONに反映
             danSongs: danSongs,
             conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
             conditions: finalConditions
@@ -614,7 +639,6 @@
         const content = await zip.generateAsync({type:"blob"});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
-        // ZIPファイル名にも入力された名前を使用
         link.download = `TaikoNauts_${rankValue}_${userTitle}.zip`;
         document.body.appendChild(link);
         link.click();
