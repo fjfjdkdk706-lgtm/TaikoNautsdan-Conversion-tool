@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="Shift_JIS">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaikoNauts 変換・分割統合ツール</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --primary: #4a90e2;
+            --text-main: #333333;
+            --border: #e1e4e8;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+            margin: 0;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.8rem;
+            color: #2c3e50;
+        }
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+        .box {
+            border: 2px dashed #bdc3c7;
+            border-radius: 8px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+        .box:hover {
+            border-color: var(--primary);
+            background: #f0f7ff;
+        }
+        .box p { margin: 0; font-size: 1.1rem; color: #7f8c8d; }
+        
+        button {
+            width: 100%;
+            padding: 18px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 30px;
+            opacity: 0.5;
+            pointer-events: none;
+            transition: 0.2s;
+        }
+        button.active { opacity: 1; pointer-events: auto; }
+        button:hover { filter: brightness(0.9); }
+
+        #log {
+            margin-top: 30px;
+            background: #2d3436;
+            color: #dfe6e9;
+            padding: 15px;
+            border-radius: 6px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: Consolas, monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+        }
+        .log-ok { color: #55efc4; }
+        .log-warn { color: #ffeaa7; }
+        .log-err { color: #ff7675; }
+        .log-info { color: #74b9ff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>TaikoNauts 変換・分割統合ツール</h1>
+    <div class="subtitle">OpenTaiko/TNDE形式の段位TJAを、TaikoNauts用(分割tja + dan.json)に一括変換</div>
+
+    <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <p>ここにフォルダをドラッグ＆ドロップ</p>
+        <input type="file" id="fileInput" webkitdirectory directory multiple style="display:none">
+    </div>
+    <div id="status" style="text-align:center; margin-top:15px; font-weight:bold;"></div>
+
+    <button id="runBtn">変換開始</button>
+
+    <div id="log">準備完了...</div>
+</div>
+
+<script>
+    // --- Elements ---
+    const fileInput = document.getElementById('fileInput');
+    const dropZone = document.getElementById('dropZone');
+    const runBtn = document.getElementById('runBtn');
+    const logArea = document.getElementById('log');
+    const statusDiv = document.getElementById('status');
+
+    let targetTjaFile = null;
+    let fileMap = new Map();
+
+    // --- Logger ---
+    function log(msg, type = '') {
+        const div = document.createElement('div');
+        div.textContent = `> ${msg}`;
+        if(type) div.className = `log-${type}`;
+        logArea.appendChild(div);
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // --- File Handling ---
+    fileInput.addEventListener('change', e => handleFiles(e.target.files));
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#4a90e2'; });
+    dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; });
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#bdc3c7';
+        handleFiles(e.dataTransfer.files);
+    });
+
+    function handleFiles(files) {
+        fileMap.clear();
+        targetTjaFile = null;
+        logArea.innerHTML = '';
+        statusDiv.textContent = '';
+        runBtn.classList.remove('active');
+
+        const fileList = Array.from(files);
+        let tjaCount = 0;
+
+        fileList.forEach(f => {
+            fileMap.set(f.name, f);
+            if (f.name.toLowerCase().endsWith('.tja')) {
+                targetTjaFile = f;
+                tjaCount++;
+            }
+        });
+
+        if (targetTjaFile) {
+            statusDiv.textContent = `読込: ${targetTjaFile.name}`;
+            log(`TJAファイルを検出: ${targetTjaFile.name}`, 'ok');
+            if (tjaCount > 1) log(`注意: 複数のTJAがあります。${targetTjaFile.name} を優先します。`, 'warn');
+            runBtn.classList.add('active');
+        } else {
+            log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
+        }
+    }
+
+    // --- Main Process ---
+    runBtn.addEventListener('click', async () => {
+        if (!targetTjaFile) return;
+        runBtn.textContent = "処理中...";
+        runBtn.classList.remove('active');
+
+        try {
+            await processTaikoNautsConversion();
+            runBtn.textContent = "完了！";
+        } catch (e) {
+            console.error(e);
+            log(`処理失敗: ${e.message}`, 'err');
+            runBtn.textContent = "エラー";
+        }
+        
+        setTimeout(() => {
+            runBtn.textContent = "変換開始";
+            runBtn.classList.add('active');
+        }, 3000);
+    });
+
+    async function processTaikoNautsConversion() {
+        const zip = new JSZip();
+
+        // 1. Read File
+        const text = await readFileContent(targetTjaFile);
+        const lines = text.split(/\r?\n/);
+        
+        // 2. Extract Global Info (Title & Exam) using robust parsing
+        let danTitle = "段位";
+        const examData = { gauge: null, conditions: [] };
+
+        lines.forEach(l => {
+            const line = l.trim();
+            if (line.toUpperCase().startsWith('TITLE:')) {
+                danTitle = line.substring(6).trim();
+            }
+            // EXAM Parsing (Logic inspired by dantja2json)
+            if (line.toUpperCase().startsWith('EXAM')) {
+                parseRobustExam(line, examData);
+            }
+        });
+
+        log(`解析完了: タイトル[${danTitle}]`, 'info');
+        log(`合格条件数: ${examData.conditions.length}`, 'info');
+
+        // 3. Create Root Folder
+        const rootFolder = zip.folder(danTitle);
+
+        // 4. Split Sections
+        let sections = [];
+        let buffer = [];
+        let nextTag = "";
+        
+        // BOM removal if exists
+        if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
+
+        for (let line of lines) {
+            if (line.trim().toUpperCase().startsWith('#NEXTSONG')) {
+                sections.push({ lines: buffer, tag: nextTag });
+                buffer = [];
+                nextTag = line.trim();
+            } else {
+                buffer.push(line);
+            }
+        }
+        sections.push({ lines: buffer, tag: nextTag });
+
+        // 5. Process Songs & Build JSON list
+        let danSongs = [];
+        let currentBpm = 0;
+        let balloonCursor = 0;
+        
+        // Load global balloons
+        let globalBalloons = [];
+        let tempBalloonStr = "";
+        lines.forEach(l => {
+            if (l.trim().toUpperCase().startsWith('BALLOON:')) tempBalloonStr += l.trim().substring(8) + ",";
+        });
+        if (tempBalloonStr) {
+            globalBalloons = tempBalloonStr.split(/[,、\s]+/).map(n => parseInt(n)).filter(n => !isNaN(n));
+        }
+
+        // Intro (index 0)
+        if (sections.length > 0) {
+            sections[0].lines.forEach(l => {
+                if(l.trim().toUpperCase().startsWith('BPM:')) currentBpm = parseFloat(l.split(':')[1]);
+            });
+            balloonCursor += count79(sections[0].lines);
+        }
+
+        // Songs (index 1+)
+        for (let i = 1; i < sections.length; i++) {
+            const section = sections[i];
+            const args = parseNextSongArgs(section.tag);
+
+            // Metadata
+            const title = args[0] || `Song_${i}`;
+            let subTitle = args[1] === "--" ? "" : (args[1] || "");
+            const genre = args[2] || "バラエティ";
+            const wave = args[3] || "";
+            const scoreInit = args[4] || "0";
+            const scoreDiff = args[5] || "0";
+
+            // Difficulty Parsing
+            let courseStr = "Oni";
+            let level = "10";
+            if (args.length >= 8) {
+                if (parseFloat(args[6]) > 4) { level = args[6]; courseStr = mapCourseStr(args[7]); }
+                else { courseStr = mapCourseStr(args[6]); level = args[7]; }
+            } else if (args[6]) {
+                level = args[6];
+            }
+
+            // Balloon Allocation
+            const needed = count79(section.lines);
+            let myBalloons = [];
+            for (let k = 0; k < needed; k++) {
+                if (balloonCursor < globalBalloons.length) myBalloons.push(globalBalloons[balloonCursor++]);
+                else myBalloons.push(5);
+            }
+
+            // Body Construction & Cleanup
+            let bodyLines = [];
+            let totalDelay = 0;
+            section.lines.forEach(l => {
+                const t = l.trim().toUpperCase();
+                // Remove commands not needed for single play
+                if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
+                    t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:')) return;
+                
+                // Delay -> Offset
+                if (t.startsWith('#DELAY')) {
+                    const val = parseFloat(l.trim().split(/\s+/)[1]);
+                    if (!isNaN(val)) totalDelay += val;
+                    return;
+                }
+                // BPM tracking
+                if (t.startsWith('#BPMCHANGE')) {
+                    const parts = l.trim().split(/\s+/);
+                    if (parts[1]) currentBpm = parseFloat(parts[1]);
+                }
+                bodyLines.push(l);
+            });
+
+            // Build Output TJA
+            let outLines = [];
+            outLines.push(`TITLE:${title}`);
+            if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
+            outLines.push(`BPM:${currentBpm}`);
+            outLines.push(`WAVE:${wave}`);
+            outLines.push(`OFFSET:${-totalDelay}`);
+            outLines.push(`GENRE:${genre}`);
+            outLines.push(`COURSE:${courseStr}`);
+            outLines.push(`LEVEL:${level}`);
+            outLines.push(`BALLOON:${myBalloons.join(',')}`);
+            outLines.push(`SCOREINIT:${scoreInit}`);
+            outLines.push(`SCOREDIFF:${scoreDiff}`);
+            outLines.push(`SCOREMODE:2`);
+            outLines.push('');
+            outLines.push('#START');
+            outLines = outLines.concat(bodyLines);
+            if (outLines[outLines.length-1].trim() !== "") outLines.push("");
+            outLines.push('#END');
+
+            const fileName = `${i}.tja`;
+            rootFolder.file(fileName, outLines.join('\r\n'));
+
+            // Bundle Audio
+            if (wave) {
+                const wName = wave.split(/[/\\]/).pop();
+                if (fileMap.has(wName)) rootFolder.file(wName, fileMap.get(wName));
+                else log(`[警告] 音源が見つかりません: ${wName}`, 'warn');
+            }
+
+            // Add to JSON list
+            danSongs.push({
+                path: fileName,
+                difficulty: mapCourseToInt(courseStr),
+                genre: genre,
+                isHidden: false
+            });
+        }
+
+        // 6. Generate dan.json (using TaikoNauts format)
+        const danJson = {
+            title: danTitle,
+            danIndex: 0,
+            danPlatePath: "Plate.png",
+            danSongs: danSongs,
+            conditionGauge: examData.gauge || { red: 80, gold: 100 },
+            conditions: examData.conditions
+        };
+        rootFolder.file("dan.json", JSON.stringify(danJson, null, 2));
+
+        // 7. Download
+        const content = await zip.generateAsync({type:"blob"});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = `TaikoNauts_${danTitle}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        log("変換・生成完了。ダウンロードを開始しました。", 'ok');
+    }
+
+    // --- Helper Functions ---
+
+    // dantja2json Logic Implementation
+    function parseRobustExam(line, data) {
+        // Remove EXAM prefix
+        let content = line.replace(/^EXAM\d*[:\s]*/i, '').trim();
+        
+        // Regex to split by comma but respecting parts
+        // Simple split by comma is usually enough for TJA format
+        const parts = content.split(/,\s*/);
+        if (parts.length < 3) return;
+
+        const typeRaw = parts[0].toLowerCase();
+        const red = parseFloat(parts[1]);
+        const gold = parseFloat(parts[2]); // Can be undefined/NaN if not present
+
+        if (isNaN(red)) return; // Minimum requirement
+
+        // 1. Gauge Check
+        if (['g', 'gauge'].includes(typeRaw)) {
+            data.gauge = { red: red, gold: isNaN(gold) ? 100 : gold };
+            return;
+        }
+
+        // 2. Condition Mapping (Based on dantja2json logic)
+        let typeName = "";
+        
+        // Great / Perfect
+        if (['p', 'jp', 'perfect', 'judge_p', 'gr'].includes(typeRaw)) typeName = "Great";
+        // Good
+        else if (['g', 'jg', 'good', 'judge_g', 'gd'].includes(typeRaw)) typeName = "Good";
+        // Miss / Bad
+        else if (['b', 'jb', 'bad', 'miss', 'judge_b'].includes(typeRaw)) typeName = "Miss";
+        // Roll
+        else if (['r', 'jr', 'roll', 'judge_r'].includes(typeRaw)) typeName = "Roll";
+        // Hit
+        else if (['h', 'jh', 'hit', 'judge_h'].includes(typeRaw)) typeName = "Hit";
+        // Combo
+        else if (['c', 'jc', 'combo'].includes(typeRaw)) typeName = "MaxCombo";
+        // Score
+        else if (['s', 'js', 'score'].includes(typeRaw)) typeName = "Score";
+        // ADLIB (Rare but supported in some forks)
+        else if (['a', 'adlib'].includes(typeRaw)) typeName = "ADLIB";
+
+        if (typeName) {
+            const thresholdObj = { red: red, gold: isNaN(gold) ? red : gold };
+            
+            // Check if type already exists
+            const existing = data.conditions.find(c => c.type === typeName);
+            if (existing) {
+                // TaikoNauts uses single threshold for total, overwrite is safer for consistency
+                existing.threshold[0] = thresholdObj; 
+            } else {
+                data.conditions.push({
+                    type: typeName,
+                    threshold: [ thresholdObj ]
+                });
+            }
+        }
+    }
+
+    function readFileContent(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const buffer = e.target.result;
+                const decoderSJIS = new TextDecoder('shift-jis');
+                const textSJIS = decoderSJIS.decode(buffer);
+                if (textSJIS.includes('TITLE:') || textSJIS.includes('COURSE:')) {
+                    resolve(textSJIS);
+                } else {
+                    resolve(new TextDecoder('utf-8').decode(buffer));
+                }
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    function count79(lines) {
+        let count = 0;
+        for (let line of lines) {
+            let trim = line.trim();
+            if (!trim || trim.startsWith('//') || trim.includes(':') || trim.startsWith('#')) continue;
+            for (let char of trim.split('//')[0]) {
+                if (char === '7' || char === '9') count++;
+            }
+        }
+        return count;
+    }
+
+    function parseNextSongArgs(tag) {
+        return tag.replace(/^#NEXTSONG\s+/i, '').split(',').map(s => s.trim());
+    }
+
+    function mapCourseStr(val) {
+        const map = ["Easy", "Normal", "Hard", "Oni", "Edit"];
+        return map[parseInt(val)] || "Oni";
+    }
+
+    function mapCourseToInt(str) {
+        const map = { "Easy": 0, "Normal": 1, "Hard": 2, "Oni": 3, "Edit": 4 };
+        return map[str] !== undefined ? map[str] : 3;
+    }
+</script>
+</body>
+</html>
