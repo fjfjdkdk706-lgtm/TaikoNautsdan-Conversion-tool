@@ -337,7 +337,7 @@
                     currentTag = t;
                     const args = parseNextSongArgs(currentTag);
                     const title = args[0] || `Song ${songCount}`;
-                    createSongCheckbox(songCount, title);
+                    createSongCheckbox(songCount, title); // 曲名は渡すが、表示には使わない
                 }
             }
             
@@ -373,6 +373,7 @@
         }
     }
 
+    // ★修正箇所: 曲名を表示せず「〇曲目」のみにする
     function createSongCheckbox(index, title) {
         const div = document.createElement('div');
         div.className = 'song-option';
@@ -384,7 +385,8 @@
         
         const label = document.createElement('label');
         label.htmlFor = `check-hidden-${index}`;
-        label.textContent = `${index}曲目: ${title}`;
+        // label.textContent = `${index}曲目: ${title}`; // 以前のコード（曲名表示）
+        label.textContent = `${index}曲目`; // ★今回の修正（曲順のみ表示）
         
         div.appendChild(checkbox);
         div.appendChild(label);
@@ -619,7 +621,7 @@
             }
         });
 
-        // ★プレート画像の処理
+        // プレート画像の処理
         let platePath = "Plate.png"; // デフォルト
         if (selectedPlate && fileMap.has(selectedPlate)) {
             platePath = selectedPlate;
@@ -629,7 +631,7 @@
         const danJson = {
             title: userTitle,
             danIndex: 0,
-            danPlatePath: platePath, // ★選択した画像名をJSONに反映
+            danPlatePath: platePath,
             danSongs: danSongs,
             conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
             conditions: finalConditions
