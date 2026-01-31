@@ -3,7 +3,7 @@
 <head>
     <meta charset="Shift_JIS">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaikoNauts 変換ツール (Complete Edition)</title>
+    <title>TaikoNauts 変換ツール (Final Edition)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root {
@@ -159,7 +159,7 @@
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">Complete Edition - 全機能搭載版</div>
+    <div class="subtitle">Final Edition - DanIndex修正版</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -171,16 +171,16 @@
         
         <div class="form-group">
             <label class="form-label">① 段位ランクを選択</label>
-            <div class="form-note">フォルダ名の先頭に付く番号を決定します。</div>
+            <div class="form-note">フォルダ番号(1-19)とDanIndex(0-18)を決定します。</div>
             <select id="rank-select">
-                <optgroup label="級位 (1-5)">
+                <optgroup label="級位 (フォルダ:1-5 / Index:0-4)">
                     <option value="1">五級 (1)</option>
                     <option value="2">四級 (2)</option>
                     <option value="3">三級 (3)</option>
                     <option value="4">二級 (4)</option>
                     <option value="5">一級 (5)</option>
                 </optgroup>
-                <optgroup label="段位 (6-15)">
+                <optgroup label="段位 (フォルダ:6-15 / Index:5-14)">
                     <option value="6" selected>初段 (6)</option>
                     <option value="7">二段 (7)</option>
                     <option value="8">三段 (8)</option>
@@ -192,7 +192,7 @@
                     <option value="14">九段 (14)</option>
                     <option value="15">十段 (15)</option>
                 </optgroup>
-                <optgroup label="高難易度 (16-19)">
+                <optgroup label="高難易度 (フォルダ:16-19 / Index:15-18)">
                     <option value="16">玄人 (16)</option>
                     <option value="17">名人 (17)</option>
                     <option value="18">超人 (18)</option>
@@ -206,7 +206,7 @@
 
         <div class="form-group">
             <label class="form-label">② 段位タイトル (フォルダ名)</label>
-            <div class="form-note">ここに入力した名前がフォルダ名とJSONに反映されます。</div>
+            <div class="form-note">フォルダ名とJSONのタイトルになります。</div>
             <input type="text" id="dan-title-input" placeholder="段位名を入力">
         </div>
 
@@ -337,7 +337,7 @@
                     currentTag = t;
                     const args = parseNextSongArgs(currentTag);
                     const title = args[0] || `Song ${songCount}`;
-                    createSongCheckbox(songCount, title); // 曲名は渡すが、表示には使わない
+                    createSongCheckbox(songCount, title);
                 }
             }
             
@@ -373,7 +373,7 @@
         }
     }
 
-    // ★修正箇所: 曲名を表示せず「〇曲目」のみにする
+    // 曲名は表示せず「〇曲目」のみにする
     function createSongCheckbox(index, title) {
         const div = document.createElement('div');
         div.className = 'song-option';
@@ -385,8 +385,7 @@
         
         const label = document.createElement('label');
         label.htmlFor = `check-hidden-${index}`;
-        // label.textContent = `${index}曲目: ${title}`; // 以前のコード（曲名表示）
-        label.textContent = `${index}曲目`; // ★今回の修正（曲順のみ表示）
+        label.textContent = `${index}曲目`; // ネタバレ防止表記
         
         div.appendChild(checkbox);
         div.appendChild(label);
@@ -421,11 +420,14 @@
         const lines = text.split(/\r?\n/);
         
         // ★ユーザー設定値の取得
-        const rankValue = parseInt(rankSelect.value);
+        const rankValue = parseInt(rankSelect.value); // 1~19
         const userTitle = danTitleInput.value.trim() || "段位";
         const selectedPlate = plateSelect.value;
         
-        log(`設定: [${rankValue}] ${userTitle}`, 'info');
+        // ★DanIndexの計算 (ランク番号 - 1)
+        const danIndexValue = rankValue - 1; 
+
+        log(`設定: [フォルダ:${rankValue}] [Index:${danIndexValue}] ${userTitle}`, 'info');
         if(selectedPlate) log(`プレート画像: ${selectedPlate}`, 'info');
 
         let sections = [];
@@ -630,7 +632,7 @@
 
         const danJson = {
             title: userTitle,
-            danIndex: 0,
+            danIndex: danIndexValue, // ★修正: 0~18の値を適用
             danPlatePath: platePath,
             danSongs: danSongs,
             conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
