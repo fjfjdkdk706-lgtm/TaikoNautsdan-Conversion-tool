@@ -84,6 +84,7 @@
             font-size: 0.85rem;
             color: #7f8c8d;
             margin-top: 4px;
+            margin-bottom: 8px;
         }
         select, input[type="text"] {
             width: 100%;
@@ -153,13 +154,28 @@
         .log-warn { color: #ffeaa7; }
         .log-err { color: #ff7675; }
         .log-info { color: #74b9ff; }
+
+        .image-select-row {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+        }
+        .image-select-row label {
+            font-size: 0.85rem;
+            color: #2c3e50;
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">Final Edition - DanIndex修正版</div>
+    <div class="subtitle">Final Edition - 新JSON(画像追加)対応版</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -211,11 +227,25 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">③ 段位プレート画像 (Dan_Plate)</label>
-            <div class="form-note">JSONの danPlatePath に設定し、ファイルを同梱します。</div>
-            <select id="plate-select">
-                <option value="">(画像が見つかりません)</option>
-            </select>
+            <label class="form-label">③ 画像設定 (各種Plate・Panel)</label>
+            <div class="form-note">JSONの各パスに設定し、選択したファイルをZIPに同梱します。</div>
+            
+            <div class="image-select-row">
+                <label>・段位プレート (danPlatePath)</label>
+                <select id="plate-select"></select>
+            </div>
+            <div class="image-select-row">
+                <label>・サイドパネル (danPanelSidePath)</label>
+                <select id="panel-side-select"></select>
+            </div>
+            <div class="image-select-row">
+                <label>・タイトルプレート (danTitlePlatePath)</label>
+                <select id="title-plate-select"></select>
+            </div>
+            <div class="image-select-row">
+                <label>・ミニプレート (danMiniPlatePath)</label>
+                <select id="mini-plate-select"></select>
+            </div>
         </div>
 
         <hr style="border:0; border-top:1px solid #ddd; margin: 20px 0;">
@@ -242,7 +272,11 @@
     const songListContainer = document.getElementById('song-list-container');
     const rankSelect = document.getElementById('rank-select');
     const danTitleInput = document.getElementById('dan-title-input');
+    
     const plateSelect = document.getElementById('plate-select');
+    const panelSideSelect = document.getElementById('panel-side-select');
+    const titlePlateSelect = document.getElementById('title-plate-select');
+    const miniPlateSelect = document.getElementById('mini-plate-select');
 
     let targetTjaFile = null;
     let fileMap = new Map();
@@ -279,7 +313,6 @@
         settingsArea.style.display = 'none';
         songListContainer.innerHTML = '';
         danTitleInput.value = '';
-        plateSelect.innerHTML = '';
 
         const fileList = Array.from(files);
         let tjaCount = 0;
@@ -308,6 +341,25 @@
             runBtn.classList.add('active');
         } else {
             log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
+        }
+    }
+
+    // --- プルダウン生成関数 ---
+    function populateImageSelect(selectElem, defaultStr) {
+        selectElem.innerHTML = '';
+        // 未選択用オプション
+        const optEmpty = document.createElement('option');
+        optEmpty.value = "";
+        optEmpty.textContent = `(指定しない / デフォルト: ${defaultStr})`;
+        selectElem.appendChild(optEmpty);
+
+        if (detectedImages.length > 0) {
+            detectedImages.forEach(imgName => {
+                const option = document.createElement('option');
+                option.value = imgName;
+                option.textContent = imgName;
+                selectElem.appendChild(option);
+            });
         }
     }
 
@@ -345,21 +397,14 @@
             settingsArea.style.display = 'block';
             danTitleInput.value = foundTitle || "新規段位";
 
-            // プレート画像プルダウン生成
-            plateSelect.innerHTML = '';
+            // 4つの画像プルダウンを生成
+            populateImageSelect(plateSelect, "Plate.png");
+            populateImageSelect(panelSideSelect, "panelside.png");
+            populateImageSelect(titlePlateSelect, "titleplate.png");
+            populateImageSelect(miniPlateSelect, "miniplate.png");
+
             if (detectedImages.length > 0) {
-                detectedImages.forEach(imgName => {
-                    const option = document.createElement('option');
-                    option.value = imgName;
-                    option.textContent = imgName;
-                    plateSelect.appendChild(option);
-                });
-                log(`${detectedImages.length} 枚の画像を検出。プレートとして選択可能です。`, 'info');
-            } else {
-                const option = document.createElement('option');
-                option.value = "";
-                option.textContent = "(画像なし) デフォルト: Plate.png";
-                plateSelect.appendChild(option);
+                log(`${detectedImages.length} 枚の画像を検出。各種画像として選択可能です。`, 'info');
             }
 
             if(songCount > 0) {
@@ -422,13 +467,9 @@
         // ★ユーザー設定値の取得
         const rankValue = parseInt(rankSelect.value); // 1~19
         const userTitle = danTitleInput.value.trim() || "段位";
-        const selectedPlate = plateSelect.value;
-        
-        // ★DanIndexの計算 (ランク番号 - 1)
         const danIndexValue = rankValue - 1; 
 
         log(`設定: [フォルダ:${rankValue}] [Index:${danIndexValue}] ${userTitle}`, 'info');
-        if(selectedPlate) log(`プレート画像: ${selectedPlate}`, 'info');
 
         let sections = [];
         let buffer = [];
@@ -591,7 +632,7 @@
             });
         }
 
-        // Build Final JSON
+        // Build Final JSON Conditions
         let finalConditions = [];
         const allTypes = new Set([
             ...Object.keys(globalExam.conditions),
@@ -623,17 +664,28 @@
             }
         });
 
-        // プレート画像の処理
-        let platePath = "Plate.png"; // デフォルト
-        if (selectedPlate && fileMap.has(selectedPlate)) {
-            platePath = selectedPlate;
-            rootFolder.file(selectedPlate, fileMap.get(selectedPlate)); // 画像ファイルをZIPに追加
-        }
+        // ★ 画像の処理とファイル同梱
+        const copyImageToZip = (selectElem, defaultName) => {
+            let path = selectElem.value || defaultName;
+            if (selectElem.value && fileMap.has(selectElem.value)) {
+                rootFolder.file(selectElem.value, fileMap.get(selectElem.value));
+            }
+            return path;
+        };
 
+        const finalPlatePath = copyImageToZip(plateSelect, "Plate.png");
+        const finalPanelSidePath = copyImageToZip(panelSideSelect, "panelside.png");
+        const finalTitlePlatePath = copyImageToZip(titlePlateSelect, "titleplate.png");
+        const finalMiniPlatePath = copyImageToZip(miniPlateSelect, "miniplate.png");
+
+        // ★ 新JSONの組み立て
         const danJson = {
             title: userTitle,
-            danIndex: danIndexValue, // ★修正: 0~18の値を適用
-            danPlatePath: platePath,
+            danIndex: danIndexValue,
+            danPlatePath: finalPlatePath,
+            danPanelSidePath: finalPanelSidePath,
+            danTitlePlatePath: finalTitlePlatePath,
+            danMiniPlatePath: finalMiniPlatePath,
             danSongs: danSongs,
             conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
             conditions: finalConditions
