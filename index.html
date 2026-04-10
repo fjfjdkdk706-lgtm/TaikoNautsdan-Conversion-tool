@@ -175,7 +175,7 @@
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">Final Edition - 新JSON(画像追加)対応版</div>
+    <div class="subtitle">Final Edition - HitCount対応版</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -347,7 +347,6 @@
     // --- プルダウン生成関数 ---
     function populateImageSelect(selectElem, defaultStr) {
         selectElem.innerHTML = '';
-        // 未選択用オプション
         const optEmpty = document.createElement('option');
         optEmpty.value = "";
         optEmpty.textContent = `(指定しない / デフォルト: ${defaultStr})`;
@@ -363,7 +362,7 @@
         }
     }
 
-    // --- Pre-Scan for UI (Songs + Title + Plate) ---
+    // --- Pre-Scan for UI ---
     async function scanSongsAndTitle(file) {
         try {
             const text = await readFileContent(file);
@@ -373,17 +372,13 @@
             let currentTag = "";
             let foundTitle = "";
 
-            // BOM削除
             if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
 
             for(let line of lines) {
                 const t = line.trim();
-                
-                // タイトルの取得
                 if(!foundTitle && t.toUpperCase().startsWith('TITLE:')) {
                     foundTitle = t.substring(6).trim();
                 }
-
                 if(t.toUpperCase().startsWith('#NEXTSONG')) {
                     songCount++;
                     currentTag = t;
@@ -393,11 +388,9 @@
                 }
             }
             
-            // UI反映
             settingsArea.style.display = 'block';
             danTitleInput.value = foundTitle || "新規段位";
 
-            // 4つの画像プルダウンを生成
             populateImageSelect(plateSelect, "Plate.png");
             populateImageSelect(panelSideSelect, "panelside.png");
             populateImageSelect(titlePlateSelect, "titleplate.png");
@@ -412,38 +405,31 @@
             } else {
                 log(`曲分割タグ未検出。`, 'warn');
             }
-
         } catch(e) {
             log(`解析エラー: ${e.message}`, 'warn');
         }
     }
 
-    // 曲名は表示せず「〇曲目」のみにする
     function createSongCheckbox(index, title) {
         const div = document.createElement('div');
         div.className = 'song-option';
-        
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.id = `check-hidden-${index}`;
         checkbox.value = 'true';
-        
         const label = document.createElement('label');
         label.htmlFor = `check-hidden-${index}`;
-        label.textContent = `${index}曲目`; // ネタバレ防止表記
-        
+        label.textContent = `${index}曲目`;
         div.appendChild(checkbox);
         div.appendChild(label);
         songListContainer.appendChild(div);
     }
-
 
     // --- Main Process ---
     runBtn.addEventListener('click', async () => {
         if (!targetTjaFile) return;
         runBtn.textContent = "処理中...";
         runBtn.classList.remove('active');
-
         try {
             await processTaikoNautsConversion();
             runBtn.textContent = "完了！";
@@ -452,7 +438,6 @@
             log(`処理失敗: ${e.message}`, 'err');
             runBtn.textContent = "エラー";
         }
-        
         setTimeout(() => {
             runBtn.textContent = "変換開始";
             runBtn.classList.add('active');
@@ -464,8 +449,7 @@
         const text = await readFileContent(targetTjaFile);
         const lines = text.split(/\r?\n/);
         
-        // ★ユーザー設定値の取得
-        const rankValue = parseInt(rankSelect.value); // 1~19
+        const rankValue = parseInt(rankSelect.value);
         const userTitle = danTitleInput.value.trim() || "段位";
         const danIndexValue = rankValue - 1; 
 
@@ -488,7 +472,6 @@
         }
         sections.push({ lines: buffer, tag: nextTag });
 
-        // Exam Parsing
         let globalExam = { gauge: null, conditions: {} }; 
         let songExams = []; 
 
@@ -505,7 +488,6 @@
             });
         }
         
-        // 出力フォルダ作成
         const outputFolderName = `${rankValue} ${userTitle}`;
         const rootFolder = zip.folder(outputFolderName);
 
@@ -529,11 +511,9 @@
             balloonCursor += count79(sections[0].lines);
         }
 
-        // Process Songs
         for (let i = 1; i < sections.length; i++) {
             const section = sections[i];
             const args = parseNextSongArgs(section.tag);
-
             const title = args[0] || `Song_${i}`;
             let subTitle = args[1] === "--" ? "" : (args[1] || "");
             const genre = args[2] || "バラエティ";
@@ -550,7 +530,6 @@
                 level = args[6];
             }
 
-            // EXAM Parsing
             let myExam = {}; 
             section.lines.forEach(l => {
                 const t = l.trim();
@@ -563,7 +542,6 @@
             });
             songExams[i] = myExam;
 
-            // Balloon
             const needed = count79(section.lines);
             let myBalloons = [];
             for (let k = 0; k < needed; k++) {
@@ -571,7 +549,6 @@
                 else myBalloons.push(5);
             }
 
-            // Body
             let bodyLines = [];
             let totalDelay = 0;
             section.lines.forEach(l => {
@@ -591,7 +568,6 @@
                 bodyLines.push(l);
             });
 
-            // TJA Output
             let outLines = [];
             outLines.push(`TITLE:${title}`);
             if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
@@ -614,13 +590,11 @@
             const fileName = `${i}.tja`;
             rootFolder.file(fileName, outLines.join('\r\n'));
 
-            // 音源コピー
             if (wave) {
                 const wName = wave.split(/[/\\]/).pop();
                 if (fileMap.has(wName)) rootFolder.file(wName, fileMap.get(wName));
             }
 
-            // isHidden Check
             const checkEl = document.getElementById(`check-hidden-${i}`);
             const isHidden = checkEl ? checkEl.checked : false;
 
@@ -632,7 +606,6 @@
             });
         }
 
-        // Build Final JSON Conditions
         let finalConditions = [];
         const allTypes = new Set([
             ...Object.keys(globalExam.conditions),
@@ -664,7 +637,6 @@
             }
         });
 
-        // ★ 画像の処理とファイル同梱
         const copyImageToZip = (selectElem, defaultName) => {
             let path = selectElem.value || defaultName;
             if (selectElem.value && fileMap.has(selectElem.value)) {
@@ -678,7 +650,6 @@
         const finalTitlePlatePath = copyImageToZip(titlePlateSelect, "titleplate.png");
         const finalMiniPlatePath = copyImageToZip(miniPlateSelect, "miniplate.png");
 
-        // ★ 新JSONの組み立て
         const danJson = {
             title: userTitle,
             danIndex: danIndexValue,
@@ -724,7 +695,8 @@
         else if (['g', 'jg', 'good', 'judge_g', 'gd'].includes(typeRaw)) typeName = "Good";
         else if (['b', 'jb', 'bad', 'miss', 'judge_b'].includes(typeRaw)) typeName = "Miss";
         else if (['r', 'jr', 'roll', 'judge_r'].includes(typeRaw)) typeName = "Roll";
-        else if (['h', 'jh', 'hit', 'judge_h'].includes(typeRaw)) typeName = "Hit";
+        // ★ ここを "HitCount" に変更しました
+        else if (['h', 'jh', 'hit', 'judge_h'].includes(typeRaw)) typeName = "HitCount";
         else if (['c', 'jc', 'combo'].includes(typeRaw)) typeName = "MaxCombo";
         else if (['s', 'js', 'score'].includes(typeRaw)) typeName = "Score";
         else if (['a', 'adlib'].includes(typeRaw)) typeName = "ADLIB";
