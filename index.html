@@ -1,753 +1,198 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="Shift_JIS">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TaikoNauts 変換ツール (Final Edition)</title>
+    <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <style>
-        :root {
-            --bg-color: #f0f2f5;
-            --card-bg: #ffffff;
-            --primary: #4a90e2;
-            --text-main: #333333;
-            --border: #e1e4e8;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 40px 20px;
-            margin: 0;
-        }
-        .container {
-            width: 100%;
-            max-width: 800px;
-            background: var(--card-bg);
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 10px;
-            font-size: 1.8rem;
-            color: #2c3e50;
-        }
-        .subtitle {
-            text-align: center;
-            color: #7f8c8d;
-            margin-bottom: 30px;
-            font-size: 0.9rem;
-        }
-        .box {
-            border: 2px dashed #bdc3c7;
-            border-radius: 8px;
-            padding: 40px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: #fafafa;
-        }
-        .box:hover {
-            border-color: var(--primary);
-            background: #f0f7ff;
-        }
-        .box p { margin: 0; font-size: 1.1rem; color: #7f8c8d; }
-        
-        /* 設定エリア */
-        #settings-area {
-            display: none;
-            margin-top: 25px;
-            padding: 20px;
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            text-align: left;
-        }
-        
-        /* フォーム要素 */
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-label {
-            display: block;
-            font-weight: bold;
-            margin-bottom: 8px;
-            font-size: 0.95rem;
-            color: #34495e;
-        }
-        .form-note {
-            font-size: 0.85rem;
-            color: #7f8c8d;
-            margin-top: 4px;
-            margin-bottom: 8px;
-        }
-        select, input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            border-radius: 6px;
-            border: 1px solid #bdc3c7;
-            font-size: 1rem;
-            background: white;
-            box-sizing: border-box;
-        }
-        input[type="text"]:focus, select:focus {
-            border-color: var(--primary);
-            outline: none;
-        }
-        
-        .song-option {
-            margin: 8px 0;
-            padding: 8px;
-            background: white;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            display: flex;
-            align-items: center;
-        }
-        .song-option input {
-            transform: scale(1.2);
-            margin-right: 10px;
-            cursor: pointer;
-        }
-        .song-option label {
-            cursor: pointer;
-            width: 100%;
-            font-size: 0.95rem;
-        }
-        
-        button {
-            width: 100%;
-            padding: 18px;
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 30px;
-            opacity: 0.5;
-            pointer-events: none;
-            transition: 0.2s;
-        }
-        button.active { opacity: 1; pointer-events: auto; }
-        button:hover { filter: brightness(0.9); }
-
-        #log {
-            margin-top: 30px;
-            background: #2d3436;
-            color: #dfe6e9;
-            padding: 15px;
-            border-radius: 6px;
-            height: 250px;
-            overflow-y: auto;
-            font-family: Consolas, monospace;
-            font-size: 0.85rem;
-            white-space: pre-wrap;
-        }
-        .log-ok { color: #55efc4; }
-        .log-warn { color: #ffeaa7; }
-        .log-err { color: #ff7675; }
-        .log-info { color: #74b9ff; }
-
-        .image-select-row {
-            margin-bottom: 15px;
-            padding: 10px;
-            background: #fff;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-        }
-        .image-select-row label {
-            font-size: 0.85rem;
-            color: #2c3e50;
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-    </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">Final Edition - HitCount対応版</div>
-
-    <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <p>ここにフォルダをドラッグ＆ドロップ</p>
-        <input type="file" id="fileInput" webkitdirectory directory multiple style="display:none">
-    </div>
-    <div id="status" style="text-align:center; margin-top:15px; font-weight:bold;"></div>
-
-    <div id="settings-area">
-        
-        <div class="form-group">
-            <label class="form-label">① 段位ランクを選択</label>
-            <div class="form-note">フォルダ番号(1-19)とDanIndex(0-18)を決定します。</div>
-            <select id="rank-select">
-                <optgroup label="級位 (フォルダ:1-5 / Index:0-4)">
-                    <option value="1">五級 (1)</option>
-                    <option value="2">四級 (2)</option>
-                    <option value="3">三級 (3)</option>
-                    <option value="4">二級 (4)</option>
-                    <option value="5">一級 (5)</option>
-                </optgroup>
-                <optgroup label="段位 (フォルダ:6-15 / Index:5-14)">
-                    <option value="6" selected>初段 (6)</option>
-                    <option value="7">二段 (7)</option>
-                    <option value="8">三段 (8)</option>
-                    <option value="9">四段 (9)</option>
-                    <option value="10">五段 (10)</option>
-                    <option value="11">六段 (11)</option>
-                    <option value="12">七段 (12)</option>
-                    <option value="13">八段 (13)</option>
-                    <option value="14">九段 (14)</option>
-                    <option value="15">十段 (15)</option>
-                </optgroup>
-                <optgroup label="高難易度 (フォルダ:16-19 / Index:15-18)">
-                    <option value="16">玄人 (16)</option>
-                    <option value="17">名人 (17)</option>
-                    <option value="18">超人 (18)</option>
-                    <option value="19">達人 (19)</option>
-                </optgroup>
-                <optgroup label="その他">
-                    <option value="20">外伝 (20)</option>
-                </optgroup>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">② 段位タイトル (フォルダ名)</label>
-            <div class="form-note">フォルダ名とJSONのタイトルになります。</div>
-            <input type="text" id="dan-title-input" placeholder="段位名を入力">
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">③ 画像設定 (各種Plate・Panel)</label>
-            <div class="form-note">JSONの各パスに設定し、選択したファイルをZIPに同梱します。</div>
-            
-            <div class="image-select-row">
-                <label>・段位プレート (danPlatePath)</label>
-                <select id="plate-select"></select>
-            </div>
-            <div class="image-select-row">
-                <label>・サイドパネル (danPanelSidePath)</label>
-                <select id="panel-side-select"></select>
-            </div>
-            <div class="image-select-row">
-                <label>・タイトルプレート (danTitlePlatePath)</label>
-                <select id="title-plate-select"></select>
-            </div>
-            <div class="image-select-row">
-                <label>・ミニプレート (danMiniPlatePath)</label>
-                <select id="mini-plate-select"></select>
-            </div>
-        </div>
-
-        <hr style="border:0; border-top:1px solid #ddd; margin: 20px 0;">
-
-        <div class="form-group">
-            <label class="form-label">④ 隠し曲設定 (タイトルを ??? にする)</label>
-            <div id="song-list-container"></div>
-        </div>
-    </div>
-
-    <button id="runBtn">変換開始</button>
-
-    <div id="log">準備完了...</div>
+<div class="lang-selector">
+    <button id="theme-toggle" class="btn-theme" data-i18n="theme_dark">ダークモード</button>
+    <select id="lang-select">
+        <option value="ja">日本語</option>
+        <option value="en">English</option>
+        <option value="zh-TW">繁體中文</option>
+    </select>
 </div>
 
+<div class="container">
+    <h1 data-i18n="title">TaikoNauts 変換ツール</h1>
+    <div class="subtitle" data-i18n="subtitle">Final Edition - HitCount対応版</div>
+
+    <div class="wizard-layout">
+        <!-- Left step indicator -->
+        <div class="wizard-steps">
+            <div class="step active" data-step="1">
+                <div class="step-circle">1</div>
+                <div class="step-label" data-i18n="step_upload">アップロード</div>
+            </div>
+            <div class="step" data-step="2">
+                <div class="step-circle">2</div>
+                <div class="step-label" data-i18n="step_basic">基本設定</div>
+            </div>
+            <div class="step" data-step="3">
+                <div class="step-circle">3</div>
+                <div class="step-label" data-i18n="step_images">画像設定</div>
+            </div>
+            <div class="step" data-step="4">
+                <div class="step-circle">4</div>
+                <div class="step-label" data-i18n="step_songs">曲設定</div>
+            </div>
+            <div class="step" data-step="5">
+                <div class="step-circle">5</div>
+                <div class="step-label" data-i18n="step_export">出力方法</div>
+            </div>
+        </div>
+
+        <!-- Right content area -->
+        <div class="wizard-content">
+            <!-- Step 1: Upload -->
+            <div class="step-content active" id="step-1">
+                <div class="step-title" data-i18n="step_upload">アップロード</div>
+                <p class="step-description" data-i18n="step1_desc">TJA ファイルと音源を含むフォルダをアップロードしてください</p>
+                <div class="box" id="dropZone">
+                    <p data-i18n="dropzone">ここにフォルダをドラッグ＆ドロップ</p>
+                    <input type="file" id="fileInput" webkitdirectory directory multiple style="display:none">
+                </div>
+                <div id="status" style="text-align:center; margin-top:15px; font-weight:bold;"></div>
+                <div id="log-step1" class="log-mini"></div>
+            </div>
+
+            <!-- Step 2: Basic settings -->
+            <div class="step-content" id="step-2">
+                <div class="step-title" data-i18n="step_basic">基本設定</div>
+                <p class="step-description">段位ランクとタイトルを設定します</p>
+
+                <div class="form-group">
+                    <label class="form-label" data-i18n="rank_label">段位ランクを選択</label>
+                    <div class="form-note" data-i18n="rank_note">フォルダ番号(1-19)とDanIndex(0-18)を決定します。</div>
+                    <select id="rank-select">
+                        <optgroup label="級位 (フォルダ:1-5 / Index:0-4)">
+                            <option value="1">五級 (1)</option>
+                            <option value="2">四級 (2)</option>
+                            <option value="3">三級 (3)</option>
+                            <option value="4">二級 (4)</option>
+                            <option value="5">一級 (5)</option>
+                        </optgroup>
+                        <optgroup label="段位 (フォルダ:6-15 / Index:5-14)">
+                            <option value="6" selected>初段 (6)</option>
+                            <option value="7">二段 (7)</option>
+                            <option value="8">三段 (8)</option>
+                            <option value="9">四段 (9)</option>
+                            <option value="10">五段 (10)</option>
+                            <option value="11">六段 (11)</option>
+                            <option value="12">七段 (12)</option>
+                            <option value="13">八段 (13)</option>
+                            <option value="14">九段 (14)</option>
+                            <option value="15">十段 (15)</option>
+                        </optgroup>
+                        <optgroup label="高難易度 (フォルダ:16-19 / Index:15-18)">
+                            <option value="16">玄人 (16)</option>
+                            <option value="17">名人 (17)</option>
+                            <option value="18">超人 (18)</option>
+                            <option value="19">達人 (19)</option>
+                        </optgroup>
+                        <optgroup label="その他">
+                            <option value="20">外伝 (20)</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" data-i18n="dan_title_label">段位タイトル (フォルダ名)</label>
+                    <div class="form-note" data-i18n="dan_title_note">フォルダ名とJSONのタイトルになります。</div>
+                    <input type="text" id="dan-title-input" placeholder="段位名を入力">
+                </div>
+            </div>
+
+            <!-- Step 3: Image settings -->
+            <div class="step-content" id="step-3">
+                <div class="step-title" data-i18n="step_images">画像設定</div>
+                <p class="step-description" data-i18n="image_settings_note">JSON の各パスに設定し、選択したファイルを ZIP に同梱します。</p>
+
+                <div class="form-group">
+                    <label class="form-label" data-i18n="plate_label">段位プレート (danPlatePath)</label>
+                    <select id="plate-select"></select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" data-i18n="panel_side_label">サイドパネル (danPanelSidePath)</label>
+                    <select id="panel-side-select"></select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" data-i18n="title_plate_label">タイトルプレート (danTitlePlatePath)</label>
+                    <select id="title-plate-select"></select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" data-i18n="mini_plate_label">ミニプレート (danMiniPlatePath)</label>
+                    <select id="mini-plate-select"></select>
+                </div>
+            </div>
+
+            <!-- Step 4: Song settings -->
+            <div class="step-content" id="step-4">
+                <div class="step-title" data-i18n="step_songs">曲設定</div>
+                <p class="step-description" data-i18n="hidden_song_label">隠し曲の場合、タイトルを ??? に設定します</p>
+                <div id="song-list-container"></div>
+            </div>
+
+            <!-- Step 5: Export method -->
+            <div class="step-content" id="step-5">
+                <div class="step-title" data-i18n="step_export">出力方法</div>
+                <p class="step-description" data-i18n="export_mode_label">転換結果の出力方法を選択してください</p>
+
+                <div class="form-group">
+                    <label class="form-label">出力方法</label>
+                    <select id="export-mode">
+                        <option value="zip" data-i18n="export_zip">ZIP ダウンロード</option>
+                        <option value="preview" data-i18n="export_preview">プレビューとコピー</option>
+                    </select>
+                </div>
+
+                <div class="info-box" data-i18n="export_info">
+                    すべての設定が完了しました。下の「変換開始」ボタンをクリックして処理を開始してください。
+                </div>
+
+                <div id="log" class="log-output"></div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="wizard-navigation">
+                <button id="prevBtn" class="btn-nav btn-prev" data-i18n="btn_prev">← 前へ</button>
+                <button id="nextBtn" class="btn-nav btn-next" data-i18n="btn_next">次へ →</button>
+            </div>
+
+            <!-- Run button (Step 5 only) -->
+            <button id="runBtn" class="btn-run hidden" data-i18n="run_btn">変換開始</button>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div id="previewModal" class="modal">
+    <div class="modal-content">
+        <h2 data-i18n="preview_title">轉換結果預覽</h2>
+        <select id="previewFileSelect"></select>
+        <div class="modal-body">
+            <pre id="previewArea"></pre>
+        </div>
+        <div class="modal-footer">
+            <button id="copyPreviewBtn" class="btn-secondary" data-i18n="preview_copy">複製內容</button>
+            <button id="closePreviewBtn" class="btn-secondary" data-i18n="preview_close">關閉</button>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
 <script>
-    // --- Elements ---
-    const fileInput = document.getElementById('fileInput');
-    const dropZone = document.getElementById('dropZone');
-    const runBtn = document.getElementById('runBtn');
-    const logArea = document.getElementById('log');
-    const statusDiv = document.getElementById('status');
-    const settingsArea = document.getElementById('settings-area');
-    const songListContainer = document.getElementById('song-list-container');
-    const rankSelect = document.getElementById('rank-select');
-    const danTitleInput = document.getElementById('dan-title-input');
-    
-    const plateSelect = document.getElementById('plate-select');
-    const panelSideSelect = document.getElementById('panel-side-select');
-    const titlePlateSelect = document.getElementById('title-plate-select');
-    const miniPlateSelect = document.getElementById('mini-plate-select');
-
-    let targetTjaFile = null;
-    let fileMap = new Map();
-    let detectedImages = [];
-
-    // --- Logger ---
-    function log(msg, type = '') {
-        const div = document.createElement('div');
-        div.textContent = `> ${msg}`;
-        if(type) div.className = `log-${type}`;
-        logArea.appendChild(div);
-        logArea.scrollTop = logArea.scrollHeight;
-    }
-
-    // --- File Handling ---
-    fileInput.addEventListener('change', e => handleFiles(e.target.files));
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#4a90e2'; });
-    dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; });
-    dropZone.addEventListener('drop', e => {
-        e.preventDefault();
-        dropZone.style.borderColor = '#bdc3c7';
-        handleFiles(e.dataTransfer.files);
+    document.getElementById('dropZone').addEventListener('click', () => {
+        document.getElementById('fileInput').click();
     });
-
-    async function handleFiles(files) {
-        fileMap.clear();
-        targetTjaFile = null;
-        detectedImages = [];
-        logArea.innerHTML = '';
-        statusDiv.textContent = '';
-        runBtn.classList.remove('active');
-        
-        // UI初期化
-        settingsArea.style.display = 'none';
-        songListContainer.innerHTML = '';
-        danTitleInput.value = '';
-
-        const fileList = Array.from(files);
-        let tjaCount = 0;
-
-        fileList.forEach(f => {
-            fileMap.set(f.name, f);
-            const lowerName = f.name.toLowerCase();
-            if (lowerName.endsWith('.tja')) {
-                targetTjaFile = f;
-                tjaCount++;
-            }
-            // 画像検出
-            if (/\.(png|jpe?g|bmp|gif)$/i.test(lowerName)) {
-                detectedImages.push(f.name);
-            }
-        });
-
-        if (targetTjaFile) {
-            statusDiv.textContent = `読込: ${targetTjaFile.name}`;
-            log(`TJAファイルを検出: ${targetTjaFile.name}`, 'ok');
-            if (tjaCount > 1) log(`注意: 複数のTJAがあります。${targetTjaFile.name} を優先します。`, 'warn');
-            
-            // スキャン実行
-            await scanSongsAndTitle(targetTjaFile);
-
-            runBtn.classList.add('active');
-        } else {
-            log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
-        }
-    }
-
-    // --- プルダウン生成関数 ---
-    function populateImageSelect(selectElem, defaultStr) {
-        selectElem.innerHTML = '';
-        const optEmpty = document.createElement('option');
-        optEmpty.value = "";
-        optEmpty.textContent = `(指定しない / デフォルト: ${defaultStr})`;
-        selectElem.appendChild(optEmpty);
-
-        if (detectedImages.length > 0) {
-            detectedImages.forEach(imgName => {
-                const option = document.createElement('option');
-                option.value = imgName;
-                option.textContent = imgName;
-                selectElem.appendChild(option);
-            });
-        }
-    }
-
-    // --- Pre-Scan for UI ---
-    async function scanSongsAndTitle(file) {
-        try {
-            const text = await readFileContent(file);
-            const lines = text.split(/\r?\n/);
-            
-            let songCount = 0;
-            let currentTag = "";
-            let foundTitle = "";
-
-            if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
-
-            for(let line of lines) {
-                const t = line.trim();
-                if(!foundTitle && t.toUpperCase().startsWith('TITLE:')) {
-                    foundTitle = t.substring(6).trim();
-                }
-                if(t.toUpperCase().startsWith('#NEXTSONG')) {
-                    songCount++;
-                    currentTag = t;
-                    const args = parseNextSongArgs(currentTag);
-                    const title = args[0] || `Song ${songCount}`;
-                    createSongCheckbox(songCount, title);
-                }
-            }
-            
-            settingsArea.style.display = 'block';
-            danTitleInput.value = foundTitle || "新規段位";
-
-            populateImageSelect(plateSelect, "Plate.png");
-            populateImageSelect(panelSideSelect, "panelside.png");
-            populateImageSelect(titlePlateSelect, "titleplate.png");
-            populateImageSelect(miniPlateSelect, "miniplate.png");
-
-            if (detectedImages.length > 0) {
-                log(`${detectedImages.length} 枚の画像を検出。各種画像として選択可能です。`, 'info');
-            }
-
-            if(songCount > 0) {
-                log(`${songCount} 曲を検出。詳細を設定してください。`, 'info');
-            } else {
-                log(`曲分割タグ未検出。`, 'warn');
-            }
-        } catch(e) {
-            log(`解析エラー: ${e.message}`, 'warn');
-        }
-    }
-
-    function createSongCheckbox(index, title) {
-        const div = document.createElement('div');
-        div.className = 'song-option';
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `check-hidden-${index}`;
-        checkbox.value = 'true';
-        const label = document.createElement('label');
-        label.htmlFor = `check-hidden-${index}`;
-        label.textContent = `${index}曲目`;
-        div.appendChild(checkbox);
-        div.appendChild(label);
-        songListContainer.appendChild(div);
-    }
-
-    // --- Main Process ---
-    runBtn.addEventListener('click', async () => {
-        if (!targetTjaFile) return;
-        runBtn.textContent = "処理中...";
-        runBtn.classList.remove('active');
-        try {
-            await processTaikoNautsConversion();
-            runBtn.textContent = "完了！";
-        } catch (e) {
-            console.error(e);
-            log(`処理失敗: ${e.message}`, 'err');
-            runBtn.textContent = "エラー";
-        }
-        setTimeout(() => {
-            runBtn.textContent = "変換開始";
-            runBtn.classList.add('active');
-        }, 3000);
-    });
-
-    async function processTaikoNautsConversion() {
-        const zip = new JSZip();
-        const text = await readFileContent(targetTjaFile);
-        const lines = text.split(/\r?\n/);
-        
-        const rankValue = parseInt(rankSelect.value);
-        const userTitle = danTitleInput.value.trim() || "段位";
-        const danIndexValue = rankValue - 1; 
-
-        log(`設定: [フォルダ:${rankValue}] [Index:${danIndexValue}] ${userTitle}`, 'info');
-
-        let sections = [];
-        let buffer = [];
-        let nextTag = "";
-        
-        if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
-
-        for (let line of lines) {
-            if (line.trim().toUpperCase().startsWith('#NEXTSONG')) {
-                sections.push({ lines: buffer, tag: nextTag });
-                buffer = [];
-                nextTag = line.trim();
-            } else {
-                buffer.push(line);
-            }
-        }
-        sections.push({ lines: buffer, tag: nextTag });
-
-        let globalExam = { gauge: null, conditions: {} }; 
-        let songExams = []; 
-
-        if (sections.length > 0) {
-            sections[0].lines.forEach(l => {
-                const line = l.trim();
-                if (line.toUpperCase().startsWith('EXAM')) {
-                    const parsed = parseExamLine(line);
-                    if (parsed) {
-                        if (parsed.isGauge) globalExam.gauge = parsed.val;
-                        else globalExam.conditions[parsed.type] = parsed.val; 
-                    }
-                }
-            });
-        }
-        
-        const outputFolderName = `${rankValue} ${userTitle}`;
-        const rootFolder = zip.folder(outputFolderName);
-
-        let danSongs = [];
-        let currentBpm = 0;
-        let balloonCursor = 0;
-        
-        let globalBalloons = [];
-        let tempBalloonStr = "";
-        lines.forEach(l => {
-            if (l.trim().toUpperCase().startsWith('BALLOON:')) tempBalloonStr += l.trim().substring(8) + ",";
-        });
-        if (tempBalloonStr) {
-            globalBalloons = tempBalloonStr.split(/[,、\s]+/).map(n => parseInt(n)).filter(n => !isNaN(n));
-        }
-
-        if (sections.length > 0) {
-            sections[0].lines.forEach(l => {
-                if(l.trim().toUpperCase().startsWith('BPM:')) currentBpm = parseFloat(l.split(':')[1]);
-            });
-            balloonCursor += count79(sections[0].lines);
-        }
-
-        for (let i = 1; i < sections.length; i++) {
-            const section = sections[i];
-            const args = parseNextSongArgs(section.tag);
-            const title = args[0] || `Song_${i}`;
-            let subTitle = args[1] === "--" ? "" : (args[1] || "");
-            const genre = args[2] || "バラエティ";
-            const wave = args[3] || "";
-            const scoreInit = args[4] || "0";
-            const scoreDiff = args[5] || "0";
-
-            let courseStr = "Oni";
-            let level = "10";
-            if (args.length >= 8) {
-                if (parseFloat(args[6]) > 4) { level = args[6]; courseStr = mapCourseStr(args[7]); }
-                else { courseStr = mapCourseStr(args[6]); level = args[7]; }
-            } else if (args[6]) {
-                level = args[6];
-            }
-
-            let myExam = {}; 
-            section.lines.forEach(l => {
-                const t = l.trim();
-                if (t.toUpperCase().startsWith('EXAM')) {
-                    const parsed = parseExamLine(t);
-                    if (parsed && !parsed.isGauge) {
-                        myExam[parsed.type] = parsed.val;
-                    }
-                }
-            });
-            songExams[i] = myExam;
-
-            const needed = count79(section.lines);
-            let myBalloons = [];
-            for (let k = 0; k < needed; k++) {
-                if (balloonCursor < globalBalloons.length) myBalloons.push(globalBalloons[balloonCursor++]);
-                else myBalloons.push(5);
-            }
-
-            let bodyLines = [];
-            let totalDelay = 0;
-            section.lines.forEach(l => {
-                const t = l.trim().toUpperCase();
-                if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
-                    t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:') || t.startsWith('TITLE:')) return;
-                
-                if (t.startsWith('#DELAY')) {
-                    const val = parseFloat(l.trim().split(/\s+/)[1]);
-                    if (!isNaN(val)) totalDelay += val;
-                    return;
-                }
-                if (t.startsWith('#BPMCHANGE')) {
-                    const parts = l.trim().split(/\s+/);
-                    if (parts[1]) currentBpm = parseFloat(parts[1]);
-                }
-                bodyLines.push(l);
-            });
-
-            let outLines = [];
-            outLines.push(`TITLE:${title}`);
-            if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
-            outLines.push(`BPM:${currentBpm}`);
-            outLines.push(`WAVE:${wave}`);
-            outLines.push(`OFFSET:${-totalDelay}`);
-            outLines.push(`GENRE:${genre}`);
-            outLines.push(`COURSE:${courseStr}`);
-            outLines.push(`LEVEL:${level}`);
-            outLines.push(`BALLOON:${myBalloons.join(',')}`);
-            outLines.push(`SCOREINIT:${scoreInit}`);
-            outLines.push(`SCOREDIFF:${scoreDiff}`);
-            outLines.push(`SCOREMODE:2`);
-            outLines.push('');
-            outLines.push('#START');
-            outLines = outLines.concat(bodyLines);
-            if (outLines[outLines.length-1].trim() !== "") outLines.push("");
-            outLines.push('#END');
-
-            const fileName = `${i}.tja`;
-            rootFolder.file(fileName, outLines.join('\r\n'));
-
-            if (wave) {
-                const wName = wave.split(/[/\\]/).pop();
-                if (fileMap.has(wName)) rootFolder.file(wName, fileMap.get(wName));
-            }
-
-            const checkEl = document.getElementById(`check-hidden-${i}`);
-            const isHidden = checkEl ? checkEl.checked : false;
-
-            danSongs.push({
-                path: fileName,
-                difficulty: mapCourseToInt(courseStr),
-                genre: genre,
-                isHidden: isHidden
-            });
-        }
-
-        let finalConditions = [];
-        const allTypes = new Set([
-            ...Object.keys(globalExam.conditions),
-            ...songExams.flatMap(e => e ? Object.keys(e) : [])
-        ]);
-
-        allTypes.forEach(type => {
-            let hasIndividual = false;
-            for(let i=1; i<sections.length; i++) {
-                if(songExams[i] && songExams[i][type]) {
-                    hasIndividual = true;
-                    break;
-                }
-            }
-
-            if (hasIndividual) {
-                let thresholdArr = [];
-                for(let i=1; i<sections.length; i++) {
-                    let val = (songExams[i] && songExams[i][type]) 
-                              ? songExams[i][type] 
-                              : (globalExam.conditions[type] || {red:0, gold:0});
-                    thresholdArr.push(val);
-                }
-                finalConditions.push({ type: type, threshold: thresholdArr });
-            } else {
-                if (globalExam.conditions[type]) {
-                    finalConditions.push({ type: type, threshold: [ globalExam.conditions[type] ] });
-                }
-            }
-        });
-
-        const copyImageToZip = (selectElem, defaultName) => {
-            let path = selectElem.value || defaultName;
-            if (selectElem.value && fileMap.has(selectElem.value)) {
-                rootFolder.file(selectElem.value, fileMap.get(selectElem.value));
-            }
-            return path;
-        };
-
-        const finalPlatePath = copyImageToZip(plateSelect, "Plate.png");
-        const finalPanelSidePath = copyImageToZip(panelSideSelect, "panelside.png");
-        const finalTitlePlatePath = copyImageToZip(titlePlateSelect, "titleplate.png");
-        const finalMiniPlatePath = copyImageToZip(miniPlateSelect, "miniplate.png");
-
-        const danJson = {
-            title: userTitle,
-            danIndex: danIndexValue,
-            danPlatePath: finalPlatePath,
-            danPanelSidePath: finalPanelSidePath,
-            danTitlePlatePath: finalTitlePlatePath,
-            danMiniPlatePath: finalMiniPlatePath,
-            danSongs: danSongs,
-            conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
-            conditions: finalConditions
-        };
-        rootFolder.file("dan.json", JSON.stringify(danJson, null, 2));
-
-        const content = await zip.generateAsync({type:"blob"});
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(content);
-        link.download = `TaikoNauts_${rankValue}_${userTitle}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        log("全処理完了。ダウンロードを開始しました。", 'ok');
-    }
-
-    // --- Helper Functions ---
-    function parseExamLine(line) {
-        let content = line.replace(/^EXAM\d*[:\s]*/i, '').trim();
-        const parts = content.split(/,\s*/);
-        if (parts.length < 2) return null;
-
-        const typeRaw = parts[0].toLowerCase();
-        const red = parseFloat(parts[1]);
-        const gold = parseFloat(parts[2]); 
-
-        if (isNaN(red)) return null;
-        const valObj = { red: red, gold: isNaN(gold) ? red : gold };
-
-        if (['g', 'gauge'].includes(typeRaw)) {
-            return { type: 'Gauge', val: valObj, isGauge: true };
-        }
-
-        let typeName = "";
-        if (['p', 'jp', 'perfect', 'judge_p', 'gr'].includes(typeRaw)) typeName = "Great";
-        else if (['g', 'jg', 'good', 'judge_g', 'gd'].includes(typeRaw)) typeName = "Good";
-        else if (['b', 'jb', 'bad', 'miss', 'judge_b'].includes(typeRaw)) typeName = "Miss";
-        else if (['r', 'jr', 'roll', 'judge_r'].includes(typeRaw)) typeName = "Roll";
-        // ★ ここを "HitCount" に変更しました
-        else if (['h', 'jh', 'hit', 'judge_h'].includes(typeRaw)) typeName = "HitCount";
-        else if (['c', 'jc', 'combo'].includes(typeRaw)) typeName = "MaxCombo";
-        else if (['s', 'js', 'score'].includes(typeRaw)) typeName = "Score";
-        else if (['a', 'adlib'].includes(typeRaw)) typeName = "ADLIB";
-
-        if (!typeName) return null;
-        return { type: typeName, val: valObj, isGauge: false };
-    }
-
-    function readFileContent(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const buffer = e.target.result;
-                const decoderSJIS = new TextDecoder('shift-jis');
-                const textSJIS = decoderSJIS.decode(buffer);
-                if (textSJIS.includes('TITLE:') || textSJIS.includes('COURSE:')) {
-                    resolve(textSJIS);
-                } else {
-                    resolve(new TextDecoder('utf-8').decode(buffer));
-                }
-            };
-            reader.onerror = reject;
-            reader.readAsArrayBuffer(file);
-        });
-    }
-
-    function count79(lines) {
-        let count = 0;
-        for (let line of lines) {
-            let trim = line.trim();
-            if (!trim || trim.startsWith('//') || trim.includes(':') || trim.startsWith('#')) continue;
-            for (let char of trim.split('//')[0]) {
-                if (char === '7' || char === '9') count++;
-            }
-        }
-        return count;
-    }
-
-    function parseNextSongArgs(tag) {
-        return tag.replace(/^#NEXTSONG\s+/i, '').split(',').map(s => s.trim());
-    }
-
-    function mapCourseStr(val) {
-        const map = ["Easy", "Normal", "Hard", "Oni", "Edit"];
-        return map[parseInt(val)] || "Oni";
-    }
-
-    function mapCourseToInt(str) {
-        const map = { "Easy": 0, "Normal": 1, "Hard": 2, "Oni": 3, "Edit": 4 };
-        return map[str] !== undefined ? map[str] : 3;
-    }
 </script>
 </body>
 </html>
