@@ -154,13 +154,28 @@
         .log-warn { color: #ffeaa7; }
         .log-err { color: #ff7675; }
         .log-info { color: #74b9ff; }
+
+        .image-select-row {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+        }
+        .image-select-row label {
+            font-size: 0.85rem;
+            color: #2c3e50;
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">Final Edition - フルオート画像処理版</div>
+    <div class="subtitle">Final Edition - DanPlate選択対応版</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -170,7 +185,7 @@
 
     <div id="settings-area">
         
-        <div class="form-group">
+       <div class="form-group">
             <label class="form-label">① 段位ランクを選択</label>
             <div class="form-note">フォルダ番号(1-19)とDanIndex(0-18)を決定します。</div>
             <select id="rank-select">
@@ -213,7 +228,16 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">③ 隠し曲設定 (タイトルを ??? にする)</label>
+            <label class="form-label">③ 画像設定 (段位プレート)</label>
+            <div class="form-note">ドロップしたフォルダ内の画像から選択します。その他の装飾画像は自動取得されます。</div>
+            <div class="image-select-row">
+                <label>・段位プレート (danPlatePath)</label>
+                <select id="plate-select"></select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">④ 隠し曲設定 (タイトルを ??? にする)</label>
             <div id="song-list-container"></div>
         </div>
     </div>
@@ -227,13 +251,11 @@
     // ==========================================
     // ★ DanIndexグループに応じてURLを生成する関数 ★
     // ==========================================
-    // Plate画像はローカルフォルダから取得するため、パネルとタイトル用のURLのみ生成します。
     // ご自身のGitHubリポジトリのURLに変更してください。
     function getGithubUrl(imageName, rankValue) {
         const baseUrl = "https://raw.githubusercontent.com/ユーザー名/リポジトリ名/main/";
         const danIndex = rankValue - 1; // 内部のDanIndex (0〜19)
         
-        // どのグループに属するか判定
         let group = "";
         if (danIndex >= 0 && danIndex <= 4) {
             group = "0_4";
@@ -251,7 +273,6 @@
             group = "default";
         }
 
-        // 装飾画像のURLを生成
         if (imageName === "titleplate.png") {
             return `${baseUrl}titleplate_${group}.png`;
         }
@@ -275,9 +296,11 @@
     const songListContainer = document.getElementById('song-list-container');
     const rankSelect = document.getElementById('rank-select');
     const danTitleInput = document.getElementById('dan-title-input');
+    const plateSelect = document.getElementById('plate-select');
 
     let targetTjaFile = null;
     let fileMap = new Map();
+    let detectedImages = [];
 
     // --- Logger ---
     function log(msg, type = '') {
@@ -301,11 +324,11 @@
     async function handleFiles(files) {
         fileMap.clear();
         targetTjaFile = null;
+        detectedImages = [];
         logArea.innerHTML = '';
         statusDiv.textContent = '';
         runBtn.classList.remove('active');
         
-        // UI初期化
         settingsArea.style.display = 'none';
         songListContainer.innerHTML = '';
         danTitleInput.value = '';
@@ -320,6 +343,9 @@
                 targetTjaFile = f;
                 tjaCount++;
             }
+            if (/\.(png|jpe?g|bmp|gif)$/i.test(lowerName)) {
+                detectedImages.push(f.name);
+            }
         });
 
         if (targetTjaFile) {
@@ -327,12 +353,31 @@
             log(`TJAファイルを検出: ${targetTjaFile.name}`, 'ok');
             if (tjaCount > 1) log(`注意: 複数のTJAがあります。${targetTjaFile.name} を優先します。`, 'warn');
             
-            // スキャン実行
             await scanSongsAndTitle(targetTjaFile);
-
             runBtn.classList.add('active');
         } else {
             log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
+        }
+    }
+
+    // --- プルダウン生成関数 ---
+    function populateImageSelect(selectElem, defaultStr) {
+        selectElem.innerHTML = '';
+        const optEmpty = document.createElement('option');
+        optEmpty.value = "";
+        optEmpty.textContent = `(自動検索して適用)`;
+        selectElem.appendChild(optEmpty);
+
+        if (detectedImages.length > 0) {
+            detectedImages.forEach(imgName => {
+                const option = document.createElement('option');
+                option.value = imgName;
+                option.textContent = imgName;
+                if (imgName.toLowerCase() === defaultStr.toLowerCase()) {
+                    option.selected = true;
+                }
+                selectElem.appendChild(option);
+            });
         }
     }
 
@@ -364,6 +409,13 @@
             
             settingsArea.style.display = 'block';
             danTitleInput.value = foundTitle || "新規段位";
+
+            // プルダウンの生成
+            populateImageSelect(plateSelect, "Plate.png");
+
+            if (detectedImages.length > 0) {
+                log(`${detectedImages.length} 枚のローカル画像を検出。段位プレートを手動選択できます。`, 'info');
+            }
 
             if(songCount > 0) {
                 log(`${songCount} 曲を検出。詳細を設定してください。`, 'info');
@@ -606,21 +658,29 @@
         // ★ 画像処理ロジック ★
         // ==========================================
         
-        // ① Plate（段位プレート）の処理: ローカルフォルダから自動取得
+        // ① Plate（段位プレート）の処理: 手動選択を最優先、なければ自動検索
         let finalPlatePath = "Plate.png";
-        let localImages = Array.from(fileMap.keys()).filter(name => /\.(png|jpe?g|bmp)$/i.test(name));
         
-        if (fileMap.has("Plate.png")) {
-            // "Plate.png" があれば最優先で使用
-            rootFolder.file("Plate.png", fileMap.get("Plate.png"));
-            log("ローカルフォルダの Plate.png を段位プレートに設定しました。", 'ok');
-        } else if (localImages.length > 0) {
-            // 見つからなければ、フォルダ内にある最初の画像をPlateとして代用
-            finalPlatePath = localImages[0];
-            rootFolder.file(finalPlatePath, fileMap.get(finalPlatePath));
-            log(`フォルダ内の ${finalPlatePath} を段位プレートとして自動適用しました。`, 'info');
+        if (plateSelect.value) {
+            // UIで画像が指定されている場合
+            finalPlatePath = plateSelect.value;
+            if (fileMap.has(finalPlatePath)) {
+                rootFolder.file(finalPlatePath, fileMap.get(finalPlatePath));
+                log(`手動選択された ${finalPlatePath} を段位プレートに設定しました。`, 'ok');
+            }
         } else {
-            log("注意: フォルダ内に段位プレート用の画像が見つかりませんでした。", 'warn');
+            // UIで指定がない（自動検索）の場合
+            let localImages = Array.from(fileMap.keys()).filter(name => /\.(png|jpe?g|bmp)$/i.test(name));
+            if (fileMap.has("Plate.png")) {
+                rootFolder.file("Plate.png", fileMap.get("Plate.png"));
+                log("ローカルフォルダの Plate.png を段位プレートに自動設定しました。", 'ok');
+            } else if (localImages.length > 0) {
+                finalPlatePath = localImages[0];
+                rootFolder.file(finalPlatePath, fileMap.get(finalPlatePath));
+                log(`フォルダ内の ${finalPlatePath} を段位プレートとして自動適用しました。`, 'info');
+            } else {
+                log("注意: フォルダ内に段位プレート用の画像が見上りませんでした。", 'warn');
+            }
         }
 
         // ② 装飾パーツの処理: GitHubからグループごとのURLで自動取得
@@ -670,6 +730,36 @@
     }
 
     // --- Helper Functions ---
+    function parseExamLine(line) {
+        let content = line.replace(/^EXAM\d*[:\s]*/i, '').trim();
+        const parts = content.split(/,\s*/);
+        if (parts.length < 2) return null;
+
+        const typeRaw = parts[0].toLowerCase();
+        const red = parseFloat(parts[1]);
+        const gold = parseFloat(parts[2]); 
+
+        if (isNaN(red)) return null;
+        const valObj = { red: red, gold: isNaN(gold) ? red : gold };
+
+        if (['g', 'gauge'].includes(typeRaw)) {
+            return { type: 'Gauge', val: valObj, isGauge: true };
+        }
+
+        let typeName = "";
+        if (['p', 'jp', 'perfect', 'judge_p', 'gr'].includes(typeRaw)) typeName = "Great";
+        else if (['g', 'jg', 'good', 'judge_g', 'gd'].includes(typeRaw)) typeName = "Good";
+        else if (['b', 'jb', 'bad', 'miss', 'judge_b'].includes(typeRaw)) typeName = "Miss";
+        else if (['r', 'jr', 'roll', 'judge_r'].includes(typeRaw)) typeName = "Roll";
+        else if (['h', 'jh', 'hit', 'judge_h'].includes(typeRaw)) typeName = "HitCount";
+        else if (['c', 'jc', 'combo'].includes(typeRaw)) typeName = "MaxCombo";
+        else if (['s', 'js', 'score'].includes(typeRaw)) typeName = "Score";
+        else if (['a', 'adlib'].includes(typeRaw)) typeName = "ADLIB";
+
+        if (!typeName) return null;
+        return { type: name => typeName, val: valObj, isGauge: false };
+    }
+
     function parseExamLine(line) {
         let content = line.replace(/^EXAM\d*[:\s]*/i, '').trim();
         const parts = content.split(/,\s*/);
