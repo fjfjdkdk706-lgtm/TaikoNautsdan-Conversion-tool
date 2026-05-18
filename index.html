@@ -154,28 +154,13 @@
         .log-warn { color: #ffeaa7; }
         .log-err { color: #ff7675; }
         .log-info { color: #74b9ff; }
-
-        .image-select-row {
-            margin-bottom: 15px;
-            padding: 10px;
-            background: #fff;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-        }
-        .image-select-row label {
-            font-size: 0.85rem;
-            color: #2c3e50;
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">Final Edition - HitCount対応版</div>
+    <div class="subtitle">Final Edition - フルオート画像処理版</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -196,19 +181,20 @@
                     <option value="4">二級 (4)</option>
                     <option value="5">一級 (5)</option>
                 </optgroup>
-                <optgroup label="段位 (フォルダ:6-15 / Index:5-14)">
+                <optgroup label="青段位 (フォルダ:6-15 / Index:5-14)">
                     <option value="6" selected>初段 (6)</option>
                     <option value="7">二段 (7)</option>
                     <option value="8">三段 (8)</option>
                     <option value="9">四段 (9)</option>
                     <option value="10">五段 (10)</option>
+                <optgroup label="赤段位 (フォルダ:6-15 / Index:5-14)">
                     <option value="11">六段 (11)</option>
                     <option value="12">七段 (12)</option>
                     <option value="13">八段 (13)</option>
                     <option value="14">九段 (14)</option>
                     <option value="15">十段 (15)</option>
                 </optgroup>
-                <optgroup label="高難易度 (フォルダ:16-19 / Index:15-18)">
+                <optgroup label="人段位 (フォルダ:16-19 / Index:15-18)">
                     <option value="16">玄人 (16)</option>
                     <option value="17">名人 (17)</option>
                     <option value="18">超人 (18)</option>
@@ -227,31 +213,7 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">③ 画像設定 (各種Plate・Panel)</label>
-            <div class="form-note">JSONの各パスに設定し、選択したファイルをZIPに同梱します。</div>
-            
-            <div class="image-select-row">
-                <label>・段位プレート (danPlatePath)</label>
-                <select id="plate-select"></select>
-            </div>
-            <div class="image-select-row">
-                <label>・サイドパネル (danPanelSidePath)</label>
-                <select id="panel-side-select"></select>
-            </div>
-            <div class="image-select-row">
-                <label>・タイトルプレート (danTitlePlatePath)</label>
-                <select id="title-plate-select"></select>
-            </div>
-            <div class="image-select-row">
-                <label>・ミニプレート (danMiniPlatePath)</label>
-                <select id="mini-plate-select"></select>
-            </div>
-        </div>
-
-        <hr style="border:0; border-top:1px solid #ddd; margin: 20px 0;">
-
-        <div class="form-group">
-            <label class="form-label">④ 隠し曲設定 (タイトルを ??? にする)</label>
+            <label class="form-label">③ 隠し曲設定 (タイトルを ??? にする)</label>
             <div id="song-list-container"></div>
         </div>
     </div>
@@ -262,6 +224,47 @@
 </div>
 
 <script>
+    // ==========================================
+    // ★ DanIndexグループに応じてURLを生成する関数 ★
+    // ==========================================
+    // Plate画像はローカルフォルダから取得するため、パネルとタイトル用のURLのみ生成します。
+    // ご自身のGitHubリポジトリのURLに変更してください。
+    function getGithubUrl(imageName, rankValue) {
+        const baseUrl = "https://raw.githubusercontent.com/ユーザー名/リポジトリ名/main/";
+        const danIndex = rankValue - 1; // 内部のDanIndex (0〜19)
+        
+        // どのグループに属するか判定
+        let group = "";
+        if (danIndex >= 0 && danIndex <= 4) {
+            group = "0_4";
+        } else if (danIndex >= 5 && danIndex <= 9) {
+            group = "5_9";
+        } else if (danIndex >= 10 && danIndex <= 14) {
+            group = "10_14";
+        } else if (danIndex >= 15 && danIndex <= 17) {
+            group = "15_17";
+        } else if (danIndex === 18) {
+            group = "18";
+        } else if (danIndex === 19) {
+            group = "19";
+        } else {
+            group = "default";
+        }
+
+        // 装飾画像のURLを生成
+        if (imageName === "titleplate.png") {
+            return `${baseUrl}titleplate_${group}.png`;
+        }
+        if (imageName === "panelside.png") {
+            return `${baseUrl}panelside_${group}.png`;
+        }
+        if (imageName === "miniplate.png") {
+            return `${baseUrl}miniplate_${group}.png`;
+        }
+
+        return `${baseUrl}${imageName}`;
+    }
+
     // --- Elements ---
     const fileInput = document.getElementById('fileInput');
     const dropZone = document.getElementById('dropZone');
@@ -272,15 +275,9 @@
     const songListContainer = document.getElementById('song-list-container');
     const rankSelect = document.getElementById('rank-select');
     const danTitleInput = document.getElementById('dan-title-input');
-    
-    const plateSelect = document.getElementById('plate-select');
-    const panelSideSelect = document.getElementById('panel-side-select');
-    const titlePlateSelect = document.getElementById('title-plate-select');
-    const miniPlateSelect = document.getElementById('mini-plate-select');
 
     let targetTjaFile = null;
     let fileMap = new Map();
-    let detectedImages = [];
 
     // --- Logger ---
     function log(msg, type = '') {
@@ -304,7 +301,6 @@
     async function handleFiles(files) {
         fileMap.clear();
         targetTjaFile = null;
-        detectedImages = [];
         logArea.innerHTML = '';
         statusDiv.textContent = '';
         runBtn.classList.remove('active');
@@ -324,10 +320,6 @@
                 targetTjaFile = f;
                 tjaCount++;
             }
-            // 画像検出
-            if (/\.(png|jpe?g|bmp|gif)$/i.test(lowerName)) {
-                detectedImages.push(f.name);
-            }
         });
 
         if (targetTjaFile) {
@@ -341,24 +333,6 @@
             runBtn.classList.add('active');
         } else {
             log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
-        }
-    }
-
-    // --- プルダウン生成関数 ---
-    function populateImageSelect(selectElem, defaultStr) {
-        selectElem.innerHTML = '';
-        const optEmpty = document.createElement('option');
-        optEmpty.value = "";
-        optEmpty.textContent = `(指定しない / デフォルト: ${defaultStr})`;
-        selectElem.appendChild(optEmpty);
-
-        if (detectedImages.length > 0) {
-            detectedImages.forEach(imgName => {
-                const option = document.createElement('option');
-                option.value = imgName;
-                option.textContent = imgName;
-                selectElem.appendChild(option);
-            });
         }
     }
 
@@ -390,15 +364,6 @@
             
             settingsArea.style.display = 'block';
             danTitleInput.value = foundTitle || "新規段位";
-
-            populateImageSelect(plateSelect, "Plate.png");
-            populateImageSelect(panelSideSelect, "panelside.png");
-            populateImageSelect(titlePlateSelect, "titleplate.png");
-            populateImageSelect(miniPlateSelect, "miniplate.png");
-
-            if (detectedImages.length > 0) {
-                log(`${detectedImages.length} 枚の画像を検出。各種画像として選択可能です。`, 'info');
-            }
 
             if(songCount > 0) {
                 log(`${songCount} 曲を検出。詳細を設定してください。`, 'info');
@@ -637,18 +602,49 @@
             }
         });
 
-        const copyImageToZip = (selectElem, defaultName) => {
-            let path = selectElem.value || defaultName;
-            if (selectElem.value && fileMap.has(selectElem.value)) {
-                rootFolder.file(selectElem.value, fileMap.get(selectElem.value));
+        // ==========================================
+        // ★ 画像処理ロジック ★
+        // ==========================================
+        
+        // ① Plate（段位プレート）の処理: ローカルフォルダから自動取得
+        let finalPlatePath = "Plate.png";
+        let localImages = Array.from(fileMap.keys()).filter(name => /\.(png|jpe?g|bmp)$/i.test(name));
+        
+        if (fileMap.has("Plate.png")) {
+            // "Plate.png" があれば最優先で使用
+            rootFolder.file("Plate.png", fileMap.get("Plate.png"));
+            log("ローカルフォルダの Plate.png を段位プレートに設定しました。", 'ok');
+        } else if (localImages.length > 0) {
+            // 見つからなければ、フォルダ内にある最初の画像をPlateとして代用
+            finalPlatePath = localImages[0];
+            rootFolder.file(finalPlatePath, fileMap.get(finalPlatePath));
+            log(`フォルダ内の ${finalPlatePath} を段位プレートとして自動適用しました。`, 'info');
+        } else {
+            log("注意: フォルダ内に段位プレート用の画像が見つかりませんでした。", 'warn');
+        }
+
+        // ② 装飾パーツの処理: GitHubからグループごとのURLで自動取得
+        const fetchGitHubImage = async (imageName) => {
+            const targetUrl = getGithubUrl(imageName, rankValue);
+            log(`装飾画像 ${imageName} をGitHubから取得中...`, 'info');
+            try {
+                const res = await fetch(targetUrl);
+                if (res.ok) {
+                    const blob = await res.blob();
+                    rootFolder.file(imageName, blob);
+                    log(`${imageName} の取得に成功しました。`, 'ok');
+                } else {
+                    log(`取得失敗 (Status: ${res.status}): ${imageName} をスキップします。`, 'warn');
+                }
+            } catch (err) {
+                log(`通信エラー: ${imageName} をスキップします。(${err.message})`, 'err');
             }
-            return path;
+            return imageName;
         };
 
-        const finalPlatePath = copyImageToZip(plateSelect, "Plate.png");
-        const finalPanelSidePath = copyImageToZip(panelSideSelect, "panelside.png");
-        const finalTitlePlatePath = copyImageToZip(titlePlateSelect, "titleplate.png");
-        const finalMiniPlatePath = copyImageToZip(miniPlateSelect, "miniplate.png");
+        const finalPanelSidePath = await fetchGitHubImage("panelside.png");
+        const finalTitlePlatePath = await fetchGitHubImage("titleplate.png");
+        const finalMiniPlatePath = await fetchGitHubImage("miniplate.png");
 
         const danJson = {
             title: userTitle,
@@ -695,7 +691,6 @@
         else if (['g', 'jg', 'good', 'judge_g', 'gd'].includes(typeRaw)) typeName = "Good";
         else if (['b', 'jb', 'bad', 'miss', 'judge_b'].includes(typeRaw)) typeName = "Miss";
         else if (['r', 'jr', 'roll', 'judge_r'].includes(typeRaw)) typeName = "Roll";
-        // ★ ここを "HitCount" に変更しました
         else if (['h', 'jh', 'hit', 'judge_h'].includes(typeRaw)) typeName = "HitCount";
         else if (['c', 'jc', 'combo'].includes(typeRaw)) typeName = "MaxCombo";
         else if (['s', 'js', 'score'].includes(typeRaw)) typeName = "Score";
