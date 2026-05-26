@@ -253,7 +253,7 @@
     // ★ DanIndexグループに応じてURLを生成する関数 ★
     // ==========================================
     function getGithubUrl(imageName, rankValue) {
-        const baseUrl = "https://raw.githubusercontent.com/fjfjdkdk706-lgtm/TaikoNautsdan-Conversion-tool/main/";
+        const baseUrl = "https://raw.githubusercontent.com/fjfjdkdk706-lgtm/TaikoNautsdan-Conversion-tool/main/img";
         const danIndex = rankValue - 1; 
         
         let group = "";
@@ -275,7 +275,6 @@
 
         if (imageName === "titleplate.png") return `${baseUrl}titleplate_${group}.png`;
         if (imageName === "panelside.png") return `${baseUrl}panelside_${group}.png`;
-        if (imageName === "miniplate.png") return `${baseUrl}miniplate_${group}.png`;
 
         return `${baseUrl}${imageName}`;
     }
