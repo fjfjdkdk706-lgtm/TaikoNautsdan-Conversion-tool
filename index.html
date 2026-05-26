@@ -3,7 +3,7 @@
 <head>
     <meta charset="Shift_JIS">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaikoNauts 変換ツール (Final Edition)</title>
+    <title>TaikoNauts 変換ツール</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root {
@@ -175,7 +175,7 @@
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">Final Edition - DanPlate選択対応版</div>
+    <div class="subtitle">v4.0</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -187,35 +187,36 @@
         
        <div class="form-group">
             <label class="form-label">① 段位ランクを選択</label>
-            <div class="form-note">フォルダ番号(1-19)とDanIndex(0-18)を決定します。</div>
+            <div class="form-note">DanIndex(0-18)を決定します。</div>
             <select id="rank-select">
-                <optgroup label="級位 (フォルダ:1-5 / Index:0-4)">
+                <optgroup label="級位 ( Index:0-4)">
                     <option value="1">五級 (1)</option>
                     <option value="2">四級 (2)</option>
                     <option value="3">三級 (3)</option>
                     <option value="4">二級 (4)</option>
                     <option value="5">一級 (5)</option>
                 </optgroup>
-                <optgroup label="青段位 (フォルダ:6-15 / Index:5-14)">
+                <optgroup label="青段位 (Index:5-14)">
                     <option value="6" selected>初段 (6)</option>
                     <option value="7">二段 (7)</option>
                     <option value="8">三段 (8)</option>
                     <option value="9">四段 (9)</option>
                     <option value="10">五段 (10)</option>
-                <optgroup label="赤段位 (フォルダ:6-15 / Index:5-14)">
+                </optgroup>
+                <optgroup label="赤段位 (Index:5-14)">
                     <option value="11">六段 (11)</option>
                     <option value="12">七段 (12)</option>
                     <option value="13">八段 (13)</option>
                     <option value="14">九段 (14)</option>
                     <option value="15">十段 (15)</option>
                 </optgroup>
-                <optgroup label="人段位 (フォルダ:16-19 / Index:15-18)">
+                <optgroup label="人段位 (Index:15-18)">
                     <option value="16">玄人 (16)</option>
                     <option value="17">名人 (17)</option>
                     <option value="18">超人 (18)</option>
                     <option value="19">達人 (19)</option>
                 </optgroup>
-                <optgroup label="その他">
+                <optgroup label="外伝 (Index:19)">
                     <option value="20">外伝 (20)</option>
                 </optgroup>
             </select>
@@ -251,10 +252,9 @@
     // ==========================================
     // ★ DanIndexグループに応じてURLを生成する関数 ★
     // ==========================================
-    // ご自身のGitHubリポジトリのURLに変更してください。
     function getGithubUrl(imageName, rankValue) {
-        const baseUrl = "https://raw.githubusercontent.com/fjfjdkdk706-lgtm/TaikoNautsdan-Conversion-tool/main/";
-        const danIndex = rankValue - 1; // 内部のDanIndex (0〜19)
+        const baseUrl = "https://raw.githubusercontent.com/ユーザー名/リポジトリ名/main/";
+        const danIndex = rankValue - 1; 
         
         let group = "";
         if (danIndex >= 0 && danIndex <= 4) {
@@ -273,15 +273,9 @@
             group = "default";
         }
 
-        if (imageName === "titleplate.png") {
-            return `${baseUrl}titleplate_${group}.png`;
-        }
-        if (imageName === "panelside.png") {
-            return `${baseUrl}panelside_${group}.png`;
-        }
-        if (imageName === "miniplate.png") {
-            return `${baseUrl}miniplate_${group}.png`;
-        }
+        if (imageName === "titleplate.png") return `${baseUrl}titleplate_${group}.png`;
+        if (imageName === "panelside.png") return `${baseUrl}panelside_${group}.png`;
+        if (imageName === "miniplate.png") return `${baseUrl}miniplate_${group}.png`;
 
         return `${baseUrl}${imageName}`;
     }
@@ -410,7 +404,6 @@
             settingsArea.style.display = 'block';
             danTitleInput.value = foundTitle || "新規段位";
 
-            // プルダウンの生成
             populateImageSelect(plateSelect, "Plate.png");
 
             if (detectedImages.length > 0) {
@@ -470,7 +463,7 @@
         const userTitle = danTitleInput.value.trim() || "段位";
         const danIndexValue = rankValue - 1; 
 
-        log(`設定: [フォルダ:${rankValue}] [Index:${danIndexValue}] ${userTitle}`, 'info');
+        log(`設定: [Index:${danIndexValue}] ${userTitle}`, 'info');
 
         let sections = [];
         let buffer = [];
@@ -505,7 +498,8 @@
             });
         }
         
-        const outputFolderName = `${rankValue} ${userTitle}`;
+        // ② フォルダ名から数字を排除し、文字だけにする
+        const outputFolderName = userTitle;
         const rootFolder = zip.folder(outputFolderName);
 
         let danSongs = [];
@@ -538,6 +532,7 @@
             const scoreInit = args[4] || "0";
             const scoreDiff = args[5] || "0";
 
+            // ① TJA内部から自動的に抜き出し、見つからなかった場合のバックアップ値
             let courseStr = "Oni";
             let level = "10";
             if (args.length >= 8) {
@@ -570,6 +565,17 @@
             let totalDelay = 0;
             section.lines.forEach(l => {
                 const t = l.trim().toUpperCase();
+                
+                // ① 各曲ブロック内に直接 COURSE: や LEVEL: が指定されている場合はそれを最優先で抜き出す
+                if (t.startsWith('COURSE:')) {
+                    courseStr = l.split(':')[1].trim();
+                    return; // 重複を防ぐためヘッダー組み立てに回す
+                }
+                if (t.startsWith('LEVEL:')) {
+                    level = l.split(':')[1].trim();
+                    return; // 重複を防ぐためヘッダー組み立てに回す
+                }
+                
                 if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
                     t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:') || t.startsWith('TITLE:')) return;
                 
@@ -654,22 +660,15 @@
             }
         });
 
-        // ==========================================
-        // ★ 画像処理ロジック ★
-        // ==========================================
-        
-        // ① Plate（段位プレート）の処理: 手動選択を最優先、なければ自動検索
+        // --- 画像処理 ---
         let finalPlatePath = "Plate.png";
-        
         if (plateSelect.value) {
-            // UIで画像が指定されている場合
             finalPlatePath = plateSelect.value;
             if (fileMap.has(finalPlatePath)) {
                 rootFolder.file(finalPlatePath, fileMap.get(finalPlatePath));
                 log(`手動選択された ${finalPlatePath} を段位プレートに設定しました。`, 'ok');
             }
         } else {
-            // UIで指定がない（自動検索）の場合
             let localImages = Array.from(fileMap.keys()).filter(name => /\.(png|jpe?g|bmp)$/i.test(name));
             if (fileMap.has("Plate.png")) {
                 rootFolder.file("Plate.png", fileMap.get("Plate.png"));
@@ -679,11 +678,10 @@
                 rootFolder.file(finalPlatePath, fileMap.get(finalPlatePath));
                 log(`フォルダ内の ${finalPlatePath} を段位プレートとして自動適用しました。`, 'info');
             } else {
-                log("注意: フォルダ内に段位プレート用の画像が見上りませんでした。", 'warn');
+                log("注意: フォルダ内に段位プレート用の画像が見つかりませんでした。", 'warn');
             }
         }
 
-        // ② 装飾パーツの処理: GitHubからグループごとのURLで自動取得
         const fetchGitHubImage = async (imageName) => {
             const targetUrl = getGithubUrl(imageName, rankValue);
             log(`装飾画像 ${imageName} をGitHubから取得中...`, 'info');
@@ -722,7 +720,8 @@
         const content = await zip.generateAsync({type:"blob"});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
-        link.download = `TaikoNauts_${rankValue}_${userTitle}.zip`;
+        // ② ZIPファイル名も文字だけにする
+        link.download = `TaikoNauts_${userTitle}.zip`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -742,39 +741,7 @@
         if (isNaN(red)) return null;
         const valObj = { red: red, gold: isNaN(gold) ? red : gold };
 
-        if (['g', 'gauge'].includes(typeRaw)) {
-            return { type: 'Gauge', val: valObj, isGauge: true };
-        }
-
-        let typeName = "";
-        if (['p', 'jp', 'perfect', 'judge_p', 'gr'].includes(typeRaw)) typeName = "Great";
-        else if (['g', 'jg', 'good', 'judge_g', 'gd'].includes(typeRaw)) typeName = "Good";
-        else if (['b', 'jb', 'bad', 'miss', 'judge_b'].includes(typeRaw)) typeName = "Miss";
-        else if (['r', 'jr', 'roll', 'judge_r'].includes(typeRaw)) typeName = "Roll";
-        else if (['h', 'jh', 'hit', 'judge_h'].includes(typeRaw)) typeName = "HitCount";
-        else if (['c', 'jc', 'combo'].includes(typeRaw)) typeName = "MaxCombo";
-        else if (['s', 'js', 'score'].includes(typeRaw)) typeName = "Score";
-        else if (['a', 'adlib'].includes(typeRaw)) typeName = "ADLIB";
-
-        if (!typeName) return null;
-        return { type: name => typeName, val: valObj, isGauge: false };
-    }
-
-    function parseExamLine(line) {
-        let content = line.replace(/^EXAM\d*[:\s]*/i, '').trim();
-        const parts = content.split(/,\s*/);
-        if (parts.length < 2) return null;
-
-        const typeRaw = parts[0].toLowerCase();
-        const red = parseFloat(parts[1]);
-        const gold = parseFloat(parts[2]); 
-
-        if (isNaN(red)) return null;
-        const valObj = { red: red, gold: isNaN(gold) ? red : gold };
-
-        if (['g', 'gauge'].includes(typeRaw)) {
-            return { type: 'Gauge', val: valObj, isGauge: true };
-        }
+        if (['g', 'gauge'].includes(typeRaw)) return { type: 'Gauge', val: valObj, isGauge: true };
 
         let typeName = "";
         if (['p', 'jp', 'perfect', 'judge_p', 'gr'].includes(typeRaw)) typeName = "Great";
