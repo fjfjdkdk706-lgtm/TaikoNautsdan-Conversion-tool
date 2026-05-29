@@ -2,7 +2,7 @@
 
 **[https://fjfjdkdk706-lgtm.github.io/TaikoNautsdan-Conversion-tool/]**
 
-OpenTaikoやTNDE（次郎系シミュレータ）向けの段位道場TJAファイルを、**TaikoNauts** で再生可能な形式（分割TJA + `dan.json`）に一括変換するWebツールです。
+OpenTaikoやTNDE（TJAP3系シミュレータ）向けの段位道場TJAファイルを、**TaikoNauts** で再生可能な形式（分割TJA + `dan.json`）に一括変換するWebツールです。
 
 ## 概要
 従来の段位TJAファイル（`#NEXTSONG` で繋がった1つのファイル）と音源が入ったフォルダをドラッグ＆ドロップするだけで、TaikoNautsの仕様に合わせたZIPファイルを生成します。
