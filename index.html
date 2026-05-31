@@ -169,13 +169,37 @@
             margin-bottom: 5px;
             font-weight: bold;
         }
+
+        /* 複数フォルダ対応用の追加デザイン */
+        .multi-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            background: #fff;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #e1e4e8;
+        }
+        .multi-label {
+            width: 130px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 10px;
+            color: var(--primary);
+        }
+        .multi-input {
+            flex: 1;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">v4.0</div>
+    <div class="subtitle">v5.0 - Multi-Folder Edition</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -250,31 +274,24 @@
 
 <script>
     // ==========================================
-    // ★ DanIndexグループに応じてURLを生成する関数 ★
+    // ★ 固定された GitHub URL 生成関数 ★
     // ==========================================
     function getGithubUrl(imageName, rankValue) {
-        const baseUrl = "https://raw.githubusercontent.com/fjfjdkdk706-lgtm/TaikoNautsdan-Conversion-tool/main";
+        const baseUrl = "https://raw.githubusercontent.com/fjfjdkdk706-lgtm/TaikoNautsdan-Conversion-tool/main/";
         const danIndex = rankValue - 1; 
         
         let group = "";
-        if (danIndex >= 0 && danIndex <= 4) {
-            group = "0_4";
-        } else if (danIndex >= 5 && danIndex <= 9) {
-            group = "5_9";
-        } else if (danIndex >= 10 && danIndex <= 14) {
-            group = "10_14";
-        } else if (danIndex >= 15 && danIndex <= 17) {
-            group = "15_17";
-        } else if (danIndex === 18) {
-            group = "18";
-        } else if (danIndex === 19) {
-            group = "19";
-        } else {
-            group = "default";
-        }
+        if (danIndex >= 0 && danIndex <= 4) group = "0_4";
+        else if (danIndex >= 5 && danIndex <= 9) group = "5_9";
+        else if (danIndex >= 10 && danIndex <= 14) group = "10_14";
+        else if (danIndex >= 15 && danIndex <= 17) group = "15_17";
+        else if (danIndex === 18) group = "18";
+        else if (danIndex === 19) group = "19";
+        else group = "default";
 
         if (imageName === "titleplate.png") return `${baseUrl}titleplate_${group}.png`;
         if (imageName === "panelside.png") return `${baseUrl}panelside_${group}.png`;
+        if (imageName === "miniplate.png") return `${baseUrl}miniplate_${group}.png`;
 
         return `${baseUrl}${imageName}`;
     }
@@ -286,16 +303,15 @@
     const logArea = document.getElementById('log');
     const statusDiv = document.getElementById('status');
     const settingsArea = document.getElementById('settings-area');
-    const songListContainer = document.getElementById('song-list-container');
+    
+    // Original fixed inputs
     const rankSelect = document.getElementById('rank-select');
     const danTitleInput = document.getElementById('dan-title-input');
     const plateSelect = document.getElementById('plate-select');
+    const songListContainer = document.getElementById('song-list-container');
 
-    let targetTjaFile = null;
-    let fileMap = new Map();
-    let detectedImages = [];
+    let danFolders = [];
 
-    // --- Logger ---
     function log(msg, type = '') {
         const div = document.createElement('div');
         div.textContent = `> ${msg}`;
@@ -315,73 +331,159 @@
     });
 
     async function handleFiles(files) {
-        fileMap.clear();
-        targetTjaFile = null;
-        detectedImages = [];
+        danFolders = [];
         logArea.innerHTML = '';
         statusDiv.textContent = '';
         runBtn.classList.remove('active');
-        
         settingsArea.style.display = 'none';
-        songListContainer.innerHTML = '';
-        danTitleInput.value = '';
 
         const fileList = Array.from(files);
-        let tjaCount = 0;
+        let pathGroups = {};
 
+        // ファイルを親フォルダごとにグループ化
         fileList.forEach(f => {
-            fileMap.set(f.name, f);
-            const lowerName = f.name.toLowerCase();
-            if (lowerName.endsWith('.tja')) {
-                targetTjaFile = f;
-                tjaCount++;
-            }
-            if (/\.(png|jpe?g|bmp|gif)$/i.test(lowerName)) {
-                detectedImages.push(f.name);
-            }
+            let pathParts = f.webkitRelativePath ? f.webkitRelativePath.split('/') : [f.name];
+            let dir = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : 'root';
+            if(!pathGroups[dir]) pathGroups[dir] = [];
+            pathGroups[dir].push(f);
         });
 
-        if (targetTjaFile) {
-            statusDiv.textContent = `読込: ${targetTjaFile.name}`;
-            log(`TJAファイルを検出: ${targetTjaFile.name}`, 'ok');
-            if (tjaCount > 1) log(`注意: 複数のTJAがあります。${targetTjaFile.name} を優先します。`, 'warn');
+        // フォルダごとに解析準備
+        for (let dir in pathGroups) {
+            let dirFiles = pathGroups[dir];
+            let tjaFile = dirFiles.find(f => f.name.toLowerCase().endsWith('.tja'));
+            if (tjaFile) {
+                let images = dirFiles.filter(f => /\.(png|jpe?g|bmp|gif)$/i.test(f.name));
+                let folderName = dir.split('/').pop() || "段位";
+                if (dir === 'root') folderName = tjaFile.name.replace(/\.[^/.]+$/, "");
+                
+                let fileMap = new Map();
+                dirFiles.forEach(f => fileMap.set(f.name, f));
+
+                danFolders.push({
+                    dir: dir,
+                    folderName: folderName,
+                    tjaFile: tjaFile,
+                    images: images.map(i => i.name),
+                    fileMap: fileMap,
+                    parsedTitle: "",
+                    songs: []
+                });
+            }
+        }
+
+        if (danFolders.length > 0) {
+            statusDiv.textContent = `${danFolders.length} 個の段位フォルダを検出`;
+            log(`${danFolders.length} 個のTJAを検出しました。一括設定が可能です。`, 'ok');
             
-            await scanSongsAndTitle(targetTjaFile);
+            for (let folder of danFolders) {
+                await scanSongsAndTitleForFolder(folder);
+            }
+            
+            buildMultiFolderUI();
+            settingsArea.style.display = 'block';
             runBtn.classList.add('active');
         } else {
             log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
         }
     }
 
-    // --- プルダウン生成関数 ---
-    function populateImageSelect(selectElem, defaultStr) {
-        selectElem.innerHTML = '';
-        const optEmpty = document.createElement('option');
-        optEmpty.value = "";
-        optEmpty.textContent = `(自動検索して適用)`;
-        selectElem.appendChild(optEmpty);
-
-        if (detectedImages.length > 0) {
-            detectedImages.forEach(imgName => {
-                const option = document.createElement('option');
-                option.value = imgName;
-                option.textContent = imgName;
-                if (imgName.toLowerCase() === defaultStr.toLowerCase()) {
-                    option.selected = true;
-                }
-                selectElem.appendChild(option);
-            });
+    // --- UI構築関数（複数フォルダの一覧化） ---
+    function getOrCreateContainer(originalElement, id) {
+        let container = document.getElementById(id);
+        if (!container) {
+            container = document.createElement('div');
+            container.id = id;
+            originalElement.parentNode.insertBefore(container, originalElement.nextSibling);
         }
+        container.innerHTML = '';
+        originalElement.style.display = 'none'; // オリジナルを隠す
+        return container;
     }
 
-    // --- Pre-Scan for UI ---
-    async function scanSongsAndTitle(file) {
+    function buildMultiFolderUI() {
+        const rankContainer = getOrCreateContainer(rankSelect, 'rank-dynamic-container');
+        const titleContainer = getOrCreateContainer(danTitleInput, 'title-dynamic-container');
+        const plateContainer = getOrCreateContainer(plateSelect, 'plate-dynamic-container');
+        songListContainer.innerHTML = '';
+
+        danFolders.forEach((folder, i) => {
+            const labelStr = folder.folderName;
+
+            // ① 段位ランク (動的生成)
+            const rankRow = document.createElement('div');
+            rankRow.className = 'multi-row';
+            const rankSelectClone = rankSelect.cloneNode(true);
+            rankSelectClone.style.display = 'block';
+            rankSelectClone.className = 'multi-input';
+            rankRow.innerHTML = `<div class="multi-label" title="${labelStr}">${labelStr}</div>`;
+            rankRow.appendChild(rankSelectClone);
+            rankContainer.appendChild(rankRow);
+            folder.uiRank = rankSelectClone;
+
+            // ② 段位タイトル (動的生成)
+            const titleRow = document.createElement('div');
+            titleRow.className = 'multi-row';
+            const titleInput = document.createElement('input');
+            titleInput.type = 'text';
+            titleInput.className = 'multi-input';
+            titleInput.value = folder.parsedTitle || folder.folderName;
+            titleRow.innerHTML = `<div class="multi-label" title="${labelStr}">${labelStr}</div>`;
+            titleRow.appendChild(titleInput);
+            titleContainer.appendChild(titleRow);
+            folder.uiTitle = titleInput;
+
+            // ③ 画像設定 (動的生成)
+            const plateRow = document.createElement('div');
+            plateRow.className = 'multi-row';
+            const plateSel = document.createElement('select');
+            plateSel.className = 'multi-input';
+            plateSel.innerHTML = `<option value="">(自動検索して適用)</option>`;
+            folder.images.forEach(img => {
+                const opt = document.createElement('option');
+                opt.value = img;
+                opt.textContent = img;
+                if (img.toLowerCase() === 'plate.png') opt.selected = true;
+                plateSel.appendChild(opt);
+            });
+            plateRow.innerHTML = `<div class="multi-label" title="${labelStr}">${labelStr}</div>`;
+            plateRow.appendChild(plateSel);
+            plateContainer.appendChild(plateRow);
+            folder.uiPlate = plateSel;
+
+            // ④ 隠し曲設定 (動的生成)
+            if (folder.songs.length > 0) {
+                const songGroup = document.createElement('div');
+                songGroup.style.marginBottom = '15px';
+                songGroup.innerHTML = `<div class="multi-label" style="width:auto; margin-bottom:5px;">📁 ${labelStr}</div>`;
+                folder.songs.forEach((song, sIdx) => {
+                    const div = document.createElement('div');
+                    div.className = 'song-option';
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = 'true';
+                    const lbl = document.createElement('label');
+                    lbl.textContent = `${sIdx + 1}曲目: ${song.title}`;
+                    
+                    // Click label to toggle checkbox
+                    lbl.onclick = () => { cb.checked = !cb.checked; };
+                    
+                    div.appendChild(cb);
+                    div.appendChild(lbl);
+                    songGroup.appendChild(div);
+                    song.uiCheck = cb;
+                });
+                songListContainer.appendChild(songGroup);
+            }
+        });
+    }
+
+    // --- Pre-Scan for Folder ---
+    async function scanSongsAndTitleForFolder(folder) {
         try {
-            const text = await readFileContent(file);
+            const text = await readFileContent(folder.tjaFile);
             const lines = text.split(/\r?\n/);
-            
             let songCount = 0;
-            let currentTag = "";
             let foundTitle = "";
 
             if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
@@ -393,50 +495,19 @@
                 }
                 if(t.toUpperCase().startsWith('#NEXTSONG')) {
                     songCount++;
-                    currentTag = t;
-                    const args = parseNextSongArgs(currentTag);
-                    const title = args[0] || `Song ${songCount}`;
-                    createSongCheckbox(songCount, title);
+                    const args = parseNextSongArgs(t);
+                    folder.songs.push({ title: args[0] || `Song ${songCount}` });
                 }
             }
-            
-            settingsArea.style.display = 'block';
-            danTitleInput.value = foundTitle || "新規段位";
-
-            populateImageSelect(plateSelect, "Plate.png");
-
-            if (detectedImages.length > 0) {
-                log(`${detectedImages.length} 枚のローカル画像を検出。段位プレートを手動選択できます。`, 'info');
-            }
-
-            if(songCount > 0) {
-                log(`${songCount} 曲を検出。詳細を設定してください。`, 'info');
-            } else {
-                log(`曲分割タグ未検出。`, 'warn');
-            }
+            folder.parsedTitle = foundTitle;
         } catch(e) {
-            log(`解析エラー: ${e.message}`, 'warn');
+            log(`[${folder.folderName}] 解析エラー: ${e.message}`, 'warn');
         }
-    }
-
-    function createSongCheckbox(index, title) {
-        const div = document.createElement('div');
-        div.className = 'song-option';
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `check-hidden-${index}`;
-        checkbox.value = 'true';
-        const label = document.createElement('label');
-        label.htmlFor = `check-hidden-${index}`;
-        label.textContent = `${index}曲目`;
-        div.appendChild(checkbox);
-        div.appendChild(label);
-        songListContainer.appendChild(div);
     }
 
     // --- Main Process ---
     runBtn.addEventListener('click', async () => {
-        if (!targetTjaFile) return;
+        if (danFolders.length === 0) return;
         runBtn.textContent = "処理中...";
         runBtn.classList.remove('active');
         try {
@@ -455,276 +526,271 @@
 
     async function processTaikoNautsConversion() {
         const zip = new JSZip();
-        const text = await readFileContent(targetTjaFile);
-        const lines = text.split(/\r?\n/);
-        
-        const rankValue = parseInt(rankSelect.value);
-        const userTitle = danTitleInput.value.trim() || "段位";
-        const danIndexValue = rankValue - 1; 
+        let defLines = ["#TITLE:段位道場"];
 
-        log(`設定: [Index:${danIndexValue}] ${userTitle}`, 'info');
+        for (let idx = 0; idx < danFolders.length; idx++) {
+            const folder = danFolders[idx];
+            const text = await readFileContent(folder.tjaFile);
+            const lines = text.split(/\r?\n/);
+            
+            const rankValue = parseInt(folder.uiRank.value);
+            const userTitle = folder.uiTitle.value.trim() || folder.folderName;
+            const danIndexValue = rankValue - 1; 
 
-        let sections = [];
-        let buffer = [];
-        let nextTag = "";
-        
-        if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
+            log(`[処理開始] ${userTitle} (Rank Index: ${danIndexValue})`, 'info');
+            defLines.push(`#DIR:${userTitle}`);
 
-        for (let line of lines) {
-            if (line.trim().toUpperCase().startsWith('#NEXTSONG')) {
-                sections.push({ lines: buffer, tag: nextTag });
-                buffer = [];
-                nextTag = line.trim();
-            } else {
-                buffer.push(line);
-            }
-        }
-        sections.push({ lines: buffer, tag: nextTag });
+            let sections = [];
+            let buffer = [];
+            let nextTag = "";
+            
+            if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
 
-        let globalExam = { gauge: null, conditions: {} }; 
-        let songExams = []; 
-
-        if (sections.length > 0) {
-            sections[0].lines.forEach(l => {
-                const line = l.trim();
-                if (line.toUpperCase().startsWith('EXAM')) {
-                    const parsed = parseExamLine(line);
-                    if (parsed) {
-                        if (parsed.isGauge) globalExam.gauge = parsed.val;
-                        else globalExam.conditions[parsed.type] = parsed.val; 
-                    }
-                }
-            });
-        }
-        
-        // ② フォルダ名から数字を排除し、文字だけにする
-        const outputFolderName = userTitle;
-        const rootFolder = zip.folder(outputFolderName);
-
-        let danSongs = [];
-        let currentBpm = 0;
-        let balloonCursor = 0;
-        
-        let globalBalloons = [];
-        let tempBalloonStr = "";
-        lines.forEach(l => {
-            if (l.trim().toUpperCase().startsWith('BALLOON:')) tempBalloonStr += l.trim().substring(8) + ",";
-        });
-        if (tempBalloonStr) {
-            globalBalloons = tempBalloonStr.split(/[,、\s]+/).map(n => parseInt(n)).filter(n => !isNaN(n));
-        }
-
-        if (sections.length > 0) {
-            sections[0].lines.forEach(l => {
-                if(l.trim().toUpperCase().startsWith('BPM:')) currentBpm = parseFloat(l.split(':')[1]);
-            });
-            balloonCursor += count79(sections[0].lines);
-        }
-
-        for (let i = 1; i < sections.length; i++) {
-            const section = sections[i];
-            const args = parseNextSongArgs(section.tag);
-            const title = args[0] || `Song_${i}`;
-            let subTitle = args[1] === "--" ? "" : (args[1] || "");
-            const genre = args[2] || "バラエティ";
-            const wave = args[3] || "";
-            const scoreInit = args[4] || "0";
-            const scoreDiff = args[5] || "0";
-
-            // ① TJA内部から自動的に抜き出し、見つからなかった場合のバックアップ値
-            let courseStr = "Oni";
-            let level = "10";
-            if (args.length >= 8) {
-                if (parseFloat(args[6]) > 4) { level = args[6]; courseStr = mapCourseStr(args[7]); }
-                else { courseStr = mapCourseStr(args[6]); level = args[7]; }
-            } else if (args[6]) {
-                level = args[6];
-            }
-
-            let myExam = {}; 
-            section.lines.forEach(l => {
-                const t = l.trim();
-                if (t.toUpperCase().startsWith('EXAM')) {
-                    const parsed = parseExamLine(t);
-                    if (parsed && !parsed.isGauge) {
-                        myExam[parsed.type] = parsed.val;
-                    }
-                }
-            });
-            songExams[i] = myExam;
-
-            const needed = count79(section.lines);
-            let myBalloons = [];
-            for (let k = 0; k < needed; k++) {
-                if (balloonCursor < globalBalloons.length) myBalloons.push(globalBalloons[balloonCursor++]);
-                else myBalloons.push(5);
-            }
-
-            let bodyLines = [];
-            let totalDelay = 0;
-            section.lines.forEach(l => {
-                const t = l.trim().toUpperCase();
-                
-                // ① 各曲ブロック内に直接 COURSE: や LEVEL: が指定されている場合はそれを最優先で抜き出す
-                if (t.startsWith('COURSE:')) {
-                    courseStr = l.split(':')[1].trim();
-                    return; // 重複を防ぐためヘッダー組み立てに回す
-                }
-                if (t.startsWith('LEVEL:')) {
-                    level = l.split(':')[1].trim();
-                    return; // 重複を防ぐためヘッダー組み立てに回す
-                }
-                
-                if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
-                    t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:') || t.startsWith('TITLE:')) return;
-                
-                if (t.startsWith('#DELAY')) {
-                    const val = parseFloat(l.trim().split(/\s+/)[1]);
-                    if (!isNaN(val)) totalDelay += val;
-                    return;
-                }
-                if (t.startsWith('#BPMCHANGE')) {
-                    const parts = l.trim().split(/\s+/);
-                    if (parts[1]) currentBpm = parseFloat(parts[1]);
-                }
-                bodyLines.push(l);
-            });
-
-            let outLines = [];
-            outLines.push(`TITLE:${title}`);
-            if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
-            outLines.push(`BPM:${currentBpm}`);
-            outLines.push(`WAVE:${wave}`);
-            outLines.push(`OFFSET:${-totalDelay}`);
-            outLines.push(`GENRE:${genre}`);
-            outLines.push(`COURSE:${courseStr}`);
-            outLines.push(`LEVEL:${level}`);
-            outLines.push(`BALLOON:${myBalloons.join(',')}`);
-            outLines.push(`SCOREINIT:${scoreInit}`);
-            outLines.push(`SCOREDIFF:${scoreDiff}`);
-            outLines.push(`SCOREMODE:2`);
-            outLines.push('');
-            outLines.push('#START');
-            outLines = outLines.concat(bodyLines);
-            if (outLines[outLines.length-1].trim() !== "") outLines.push("");
-            outLines.push('#END');
-
-            const fileName = `${i}.tja`;
-            rootFolder.file(fileName, outLines.join('\r\n'));
-
-            if (wave) {
-                const wName = wave.split(/[/\\]/).pop();
-                if (fileMap.has(wName)) rootFolder.file(wName, fileMap.get(wName));
-            }
-
-            const checkEl = document.getElementById(`check-hidden-${i}`);
-            const isHidden = checkEl ? checkEl.checked : false;
-
-            danSongs.push({
-                path: fileName,
-                difficulty: mapCourseToInt(courseStr),
-                genre: genre,
-                isHidden: isHidden
-            });
-        }
-
-        let finalConditions = [];
-        const allTypes = new Set([
-            ...Object.keys(globalExam.conditions),
-            ...songExams.flatMap(e => e ? Object.keys(e) : [])
-        ]);
-
-        allTypes.forEach(type => {
-            let hasIndividual = false;
-            for(let i=1; i<sections.length; i++) {
-                if(songExams[i] && songExams[i][type]) {
-                    hasIndividual = true;
-                    break;
-                }
-            }
-
-            if (hasIndividual) {
-                let thresholdArr = [];
-                for(let i=1; i<sections.length; i++) {
-                    let val = (songExams[i] && songExams[i][type]) 
-                              ? songExams[i][type] 
-                              : (globalExam.conditions[type] || {red:0, gold:0});
-                    thresholdArr.push(val);
-                }
-                finalConditions.push({ type: type, threshold: thresholdArr });
-            } else {
-                if (globalExam.conditions[type]) {
-                    finalConditions.push({ type: type, threshold: [ globalExam.conditions[type] ] });
-                }
-            }
-        });
-
-        // --- 画像処理 ---
-        let finalPlatePath = "Plate.png";
-        if (plateSelect.value) {
-            finalPlatePath = plateSelect.value;
-            if (fileMap.has(finalPlatePath)) {
-                rootFolder.file(finalPlatePath, fileMap.get(finalPlatePath));
-                log(`手動選択された ${finalPlatePath} を段位プレートに設定しました。`, 'ok');
-            }
-        } else {
-            let localImages = Array.from(fileMap.keys()).filter(name => /\.(png|jpe?g|bmp)$/i.test(name));
-            if (fileMap.has("Plate.png")) {
-                rootFolder.file("Plate.png", fileMap.get("Plate.png"));
-                log("ローカルフォルダの Plate.png を段位プレートに自動設定しました。", 'ok');
-            } else if (localImages.length > 0) {
-                finalPlatePath = localImages[0];
-                rootFolder.file(finalPlatePath, fileMap.get(finalPlatePath));
-                log(`フォルダ内の ${finalPlatePath} を段位プレートとして自動適用しました。`, 'info');
-            } else {
-                log("注意: フォルダ内に段位プレート用の画像が見つかりませんでした。", 'warn');
-            }
-        }
-
-        const fetchGitHubImage = async (imageName) => {
-            const targetUrl = getGithubUrl(imageName, rankValue);
-            log(`装飾画像 ${imageName} をGitHubから取得中...`, 'info');
-            try {
-                const res = await fetch(targetUrl);
-                if (res.ok) {
-                    const blob = await res.blob();
-                    rootFolder.file(imageName, blob);
-                    log(`${imageName} の取得に成功しました。`, 'ok');
+            for (let line of lines) {
+                if (line.trim().toUpperCase().startsWith('#NEXTSONG')) {
+                    sections.push({ lines: buffer, tag: nextTag });
+                    buffer = [];
+                    nextTag = line.trim();
                 } else {
-                    log(`取得失敗 (Status: ${res.status}): ${imageName} をスキップします。`, 'warn');
+                    buffer.push(line);
                 }
-            } catch (err) {
-                log(`通信エラー: ${imageName} をスキップします。(${err.message})`, 'err');
             }
-            return imageName;
-        };
+            sections.push({ lines: buffer, tag: nextTag });
 
-        const finalPanelSidePath = await fetchGitHubImage("panelside.png");
-        const finalTitlePlatePath = await fetchGitHubImage("titleplate.png");
-        const finalMiniPlatePath = await fetchGitHubImage("miniplate.png");
+            let globalExam = { gauge: null, conditions: {} }; 
+            let songExams = []; 
 
-        const danJson = {
-            title: userTitle,
-            danIndex: danIndexValue,
-            danPlatePath: finalPlatePath,
-            danPanelSidePath: finalPanelSidePath,
-            danTitlePlatePath: finalTitlePlatePath,
-            danMiniPlatePath: finalMiniPlatePath,
-            danSongs: danSongs,
-            conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
-            conditions: finalConditions
-        };
-        rootFolder.file("dan.json", JSON.stringify(danJson, null, 2));
+            if (sections.length > 0) {
+                sections[0].lines.forEach(l => {
+                    const line = l.trim();
+                    if (line.toUpperCase().startsWith('EXAM')) {
+                        const parsed = parseExamLine(line);
+                        if (parsed) {
+                            if (parsed.isGauge) globalExam.gauge = parsed.val;
+                            else globalExam.conditions[parsed.type] = parsed.val; 
+                        }
+                    }
+                });
+            }
+            
+            const rootFolder = zip.folder(userTitle);
+
+            let danSongs = [];
+            let currentBpm = 0;
+            let balloonCursor = 0;
+            
+            let globalBalloons = [];
+            let tempBalloonStr = "";
+            lines.forEach(l => {
+                if (l.trim().toUpperCase().startsWith('BALLOON:')) tempBalloonStr += l.trim().substring(8) + ",";
+            });
+            if (tempBalloonStr) {
+                globalBalloons = tempBalloonStr.split(/[,、\s]+/).map(n => parseInt(n)).filter(n => !isNaN(n));
+            }
+
+            if (sections.length > 0) {
+                sections[0].lines.forEach(l => {
+                    if(l.trim().toUpperCase().startsWith('BPM:')) currentBpm = parseFloat(l.split(':')[1]);
+                });
+                balloonCursor += count79(sections[0].lines);
+            }
+
+            for (let i = 1; i < sections.length; i++) {
+                const section = sections[i];
+                const args = parseNextSongArgs(section.tag);
+                const title = args[0] || `Song_${i}`;
+                let subTitle = args[1] === "--" ? "" : (args[1] || "");
+                const genre = args[2] || "バラエティ";
+                const wave = args[3] || "";
+                const scoreInit = args[4] || "0";
+                const scoreDiff = args[5] || "0";
+
+                let courseStr = "Oni";
+                let level = "10";
+                if (args.length >= 8) {
+                    if (parseFloat(args[6]) > 4) { level = args[6]; courseStr = mapCourseStr(args[7]); }
+                    else { courseStr = mapCourseStr(args[6]); level = args[7]; }
+                } else if (args[6]) {
+                    level = args[6];
+                }
+
+                let myExam = {}; 
+                section.lines.forEach(l => {
+                    const t = l.trim();
+                    if (t.toUpperCase().startsWith('EXAM')) {
+                        const parsed = parseExamLine(t);
+                        if (parsed && !parsed.isGauge) myExam[parsed.type] = parsed.val;
+                    }
+                });
+                songExams[i] = myExam;
+
+                const needed = count79(section.lines);
+                let myBalloons = [];
+                for (let k = 0; k < needed; k++) {
+                    if (balloonCursor < globalBalloons.length) myBalloons.push(globalBalloons[balloonCursor++]);
+                    else myBalloons.push(5);
+                }
+
+                let bodyLines = [];
+                let totalDelay = 0;
+                section.lines.forEach(l => {
+                    const t = l.trim().toUpperCase();
+                    
+                    if (t.startsWith('COURSE:')) {
+                        courseStr = l.split(':')[1].trim(); return;
+                    }
+                    if (t.startsWith('LEVEL:')) {
+                        level = l.split(':')[1].trim(); return;
+                    }
+                    if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
+                        t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:') || t.startsWith('TITLE:')) return;
+                    
+                    if (t.startsWith('#DELAY')) {
+                        const val = parseFloat(l.trim().split(/\s+/)[1]);
+                        if (!isNaN(val)) totalDelay += val;
+                        return;
+                    }
+                    if (t.startsWith('#BPMCHANGE')) {
+                        const parts = l.trim().split(/\s+/);
+                        if (parts[1]) currentBpm = parseFloat(parts[1]);
+                    }
+                    bodyLines.push(l);
+                });
+
+                let outLines = [];
+                outLines.push(`TITLE:${title}`);
+                if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
+                outLines.push(`BPM:${currentBpm}`);
+                outLines.push(`WAVE:${wave}`);
+                outLines.push(`OFFSET:${-totalDelay}`);
+                outLines.push(`GENRE:${genre}`);
+                outLines.push(`COURSE:${courseStr}`);
+                outLines.push(`LEVEL:${level}`);
+                outLines.push(`BALLOON:${myBalloons.join(',')}`);
+                outLines.push(`SCOREINIT:${scoreInit}`);
+                outLines.push(`SCOREDIFF:${scoreDiff}`);
+                outLines.push(`SCOREMODE:2`);
+                outLines.push('');
+                outLines.push('#START');
+                outLines = outLines.concat(bodyLines);
+                if (outLines[outLines.length-1].trim() !== "") outLines.push("");
+                outLines.push('#END');
+
+                const fileName = `${i}.tja`;
+                rootFolder.file(fileName, outLines.join('\r\n'));
+
+                if (wave) {
+                    const wName = wave.split(/[/\\]/).pop();
+                    if (folder.fileMap.has(wName)) rootFolder.file(wName, folder.fileMap.get(wName));
+                }
+
+                const isHidden = (folder.songs[i - 1] && folder.songs[i - 1].uiCheck) ? folder.songs[i - 1].uiCheck.checked : false;
+
+                danSongs.push({
+                    path: fileName,
+                    difficulty: mapCourseToInt(courseStr),
+                    genre: genre,
+                    isHidden: isHidden
+                });
+            }
+
+            let finalConditions = [];
+            const allTypes = new Set([
+                ...Object.keys(globalExam.conditions),
+                ...songExams.flatMap(e => e ? Object.keys(e) : [])
+            ]);
+
+            allTypes.forEach(type => {
+                let hasIndividual = false;
+                for(let i=1; i<sections.length; i++) {
+                    if(songExams[i] && songExams[i][type]) { hasIndividual = true; break; }
+                }
+
+                if (hasIndividual) {
+                    let thresholdArr = [];
+                    for(let i=1; i<sections.length; i++) {
+                        let val = (songExams[i] && songExams[i][type]) 
+                                  ? songExams[i][type] 
+                                  : (globalExam.conditions[type] || {red:0, gold:0});
+                        thresholdArr.push(val);
+                    }
+                    finalConditions.push({ type: type, threshold: thresholdArr });
+                } else {
+                    if (globalExam.conditions[type]) {
+                        finalConditions.push({ type: type, threshold: [ globalExam.conditions[type] ] });
+                    }
+                }
+            });
+
+            // --- 画像処理 ---
+            let finalPlatePath = "Plate.png";
+            if (folder.uiPlate.value) {
+                finalPlatePath = folder.uiPlate.value;
+                if (folder.fileMap.has(finalPlatePath)) {
+                    rootFolder.file(finalPlatePath, folder.fileMap.get(finalPlatePath));
+                }
+            } else {
+                let localImages = Array.from(folder.fileMap.keys()).filter(name => /\.(png|jpe?g|bmp)$/i.test(name));
+                if (folder.fileMap.has("Plate.png")) {
+                    rootFolder.file("Plate.png", folder.fileMap.get("Plate.png"));
+                } else if (localImages.length > 0) {
+                    finalPlatePath = localImages[0];
+                    rootFolder.file(finalPlatePath, folder.fileMap.get(finalPlatePath));
+                }
+            }
+
+            const fetchGitHubImage = async (imageName) => {
+                const targetUrl = getGithubUrl(imageName, rankValue);
+                try {
+                    const res = await fetch(targetUrl);
+                    if (res.ok) {
+                        const blob = await res.blob();
+                        rootFolder.file(imageName, blob);
+                    } else {
+                        log(`[${userTitle}] ${imageName} の取得に失敗しスキップしました。`, 'warn');
+                    }
+                } catch (err) {
+                    log(`通信エラー: ${imageName} (${err.message})`, 'err');
+                }
+                return imageName;
+            };
+
+            const finalPanelSidePath = await fetchGitHubImage("panelside.png");
+            const finalTitlePlatePath = await fetchGitHubImage("titleplate.png");
+            const finalMiniPlatePath = await fetchGitHubImage("miniplate.png");
+
+            const danJson = {
+                title: userTitle,
+                danIndex: danIndexValue,
+                danPlatePath: finalPlatePath,
+                danPanelSidePath: finalPanelSidePath,
+                danTitlePlatePath: finalTitlePlatePath,
+                danMiniPlatePath: finalMiniPlatePath,
+                danSongs: danSongs,
+                conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
+                conditions: finalConditions
+            };
+            rootFolder.file("dan.json", JSON.stringify(danJson, null, 2));
+            log(`[${userTitle}] フォルダの構築が完了しました。`, 'ok');
+        }
+
+        // 複数フォルダの場合は dan.def を生成
+        let zipFilename = "TaikoNauts_Converted.zip";
+        if (danFolders.length > 1) {
+            zip.file("dan.def", defLines.join("\r\n"));
+            log("複数フォルダが検出されたため、dan.defを生成しました。", 'info');
+        } else if (danFolders.length === 1) {
+            zipFilename = `TaikoNauts_${danFolders[0].uiTitle.value.trim() || danFolders[0].folderName}.zip`;
+        }
 
         const content = await zip.generateAsync({type:"blob"});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
-        // ② ZIPファイル名も文字だけにする
-        link.download = `TaikoNauts_${userTitle}.zip`;
+        link.download = zipFilename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        log("全処理完了。ダウンロードを開始しました。", 'ok');
+        log("全処理完了。一括ダウンロードを開始しました。", 'ok');
     }
 
     // --- Helper Functions ---
