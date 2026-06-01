@@ -199,7 +199,7 @@
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">v5.0 - Multi-Folder Edition</div>
+    <div class="subtitle">v5.1 - Multi-Folder Edition</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -340,7 +340,6 @@
         const fileList = Array.from(files);
         let pathGroups = {};
 
-        // ファイルを親フォルダごとにグループ化
         fileList.forEach(f => {
             let pathParts = f.webkitRelativePath ? f.webkitRelativePath.split('/') : [f.name];
             let dir = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : 'root';
@@ -348,7 +347,6 @@
             pathGroups[dir].push(f);
         });
 
-        // フォルダごとに解析準備
         for (let dir in pathGroups) {
             let dirFiles = pathGroups[dir];
             let tjaFile = dirFiles.find(f => f.name.toLowerCase().endsWith('.tja'));
@@ -388,7 +386,6 @@
         }
     }
 
-    // --- UI構築関数（複数フォルダの一覧化） ---
     function getOrCreateContainer(originalElement, id) {
         let container = document.getElementById(id);
         if (!container) {
@@ -397,11 +394,27 @@
             originalElement.parentNode.insertBefore(container, originalElement.nextSibling);
         }
         container.innerHTML = '';
-        originalElement.style.display = 'none'; // オリジナルを隠す
+        originalElement.style.display = 'none'; 
         return container;
     }
 
     function buildMultiFolderUI() {
+        // dan.def 全体タイトル用 UIの生成（複数フォルダ時のみ）
+        const existingDefTitle = document.getElementById('def-title-container');
+        if (existingDefTitle) existingDefTitle.remove();
+
+        if (danFolders.length > 1) {
+            const defTitleContainer = document.createElement('div');
+            defTitleContainer.id = 'def-title-container';
+            defTitleContainer.className = 'form-group';
+            defTitleContainer.innerHTML = `
+                <label class="form-label" style="color: #e74c3c;">★ コース全体タイトル (dan.def)</label>
+                <div class="form-note">ゲーム内に表示される全体のフォルダ名になります。また、ダウンロードされるZIPファイル名にも適用されます。</div>
+                <input type="text" id="def-title-input" placeholder="段位道場" value="段位道場">
+            `;
+            settingsArea.insertBefore(defTitleContainer, settingsArea.firstChild);
+        }
+
         const rankContainer = getOrCreateContainer(rankSelect, 'rank-dynamic-container');
         const titleContainer = getOrCreateContainer(danTitleInput, 'title-dynamic-container');
         const plateContainer = getOrCreateContainer(plateSelect, 'plate-dynamic-container');
@@ -410,7 +423,7 @@
         danFolders.forEach((folder, i) => {
             const labelStr = folder.folderName;
 
-            // ① 段位ランク (動的生成)
+            // ① 段位ランク 
             const rankRow = document.createElement('div');
             rankRow.className = 'multi-row';
             const rankSelectClone = rankSelect.cloneNode(true);
@@ -421,7 +434,7 @@
             rankContainer.appendChild(rankRow);
             folder.uiRank = rankSelectClone;
 
-            // ② 段位タイトル (動的生成)
+            // ② 段位タイトル
             const titleRow = document.createElement('div');
             titleRow.className = 'multi-row';
             const titleInput = document.createElement('input');
@@ -433,7 +446,7 @@
             titleContainer.appendChild(titleRow);
             folder.uiTitle = titleInput;
 
-            // ③ 画像設定 (動的生成)
+            // ③ 画像設定
             const plateRow = document.createElement('div');
             plateRow.className = 'multi-row';
             const plateSel = document.createElement('select');
@@ -451,7 +464,7 @@
             plateContainer.appendChild(plateRow);
             folder.uiPlate = plateSel;
 
-            // ④ 隠し曲設定 (動的生成)
+            // ④ 隠し曲設定 (曲名は見せない)
             if (folder.songs.length > 0) {
                 const songGroup = document.createElement('div');
                 songGroup.style.marginBottom = '15px';
@@ -463,9 +476,9 @@
                     cb.type = 'checkbox';
                     cb.value = 'true';
                     const lbl = document.createElement('label');
-                    lbl.textContent = `${sIdx + 1}曲目: ${song.title}`;
+                    // ★ 曲名を出さず「X曲目」のみ表示
+                    lbl.textContent = `${sIdx + 1}曲目`; 
                     
-                    // Click label to toggle checkbox
                     lbl.onclick = () => { cb.checked = !cb.checked; };
                     
                     div.appendChild(cb);
@@ -478,7 +491,6 @@
         });
     }
 
-    // --- Pre-Scan for Folder ---
     async function scanSongsAndTitleForFolder(folder) {
         try {
             const text = await readFileContent(folder.tjaFile);
@@ -505,7 +517,6 @@
         }
     }
 
-    // --- Main Process ---
     runBtn.addEventListener('click', async () => {
         if (danFolders.length === 0) return;
         runBtn.textContent = "処理中...";
@@ -526,7 +537,16 @@
 
     async function processTaikoNautsConversion() {
         const zip = new JSZip();
-        let defLines = ["#TITLE:段位道場"];
+        
+        // ★ dan.def 用のタイトル取得
+        let defTitle = "段位道場";
+        if (danFolders.length > 1) {
+            const defTitleInput = document.getElementById('def-title-input');
+            if (defTitleInput && defTitleInput.value.trim() !== "") {
+                defTitle = defTitleInput.value.trim();
+            }
+        }
+        let defLines = [`#TITLE:${defTitle}`];
 
         for (let idx = 0; idx < danFolders.length; idx++) {
             const folder = danFolders[idx];
@@ -635,13 +655,8 @@
                 let totalDelay = 0;
                 section.lines.forEach(l => {
                     const t = l.trim().toUpperCase();
-                    
-                    if (t.startsWith('COURSE:')) {
-                        courseStr = l.split(':')[1].trim(); return;
-                    }
-                    if (t.startsWith('LEVEL:')) {
-                        level = l.split(':')[1].trim(); return;
-                    }
+                    if (t.startsWith('COURSE:')) { courseStr = l.split(':')[1].trim(); return; }
+                    if (t.startsWith('LEVEL:')) { level = l.split(':')[1].trim(); return; }
                     if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
                         t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:') || t.startsWith('TITLE:')) return;
                     
@@ -657,8 +672,11 @@
                     bodyLines.push(l);
                 });
 
+                const isHidden = (folder.songs[i - 1] && folder.songs[i - 1].uiCheck) ? folder.songs[i - 1].uiCheck.checked : false;
+
                 let outLines = [];
-                outLines.push(`TITLE:${title}`);
+                // ★ 隠し曲指定された場合、出力するTJA自体のタイトルも???にする
+                outLines.push(`TITLE:${isHidden ? "???" : title}`);
                 if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
                 outLines.push(`BPM:${currentBpm}`);
                 outLines.push(`WAVE:${wave}`);
@@ -683,8 +701,6 @@
                     const wName = wave.split(/[/\\]/).pop();
                     if (folder.fileMap.has(wName)) rootFolder.file(wName, folder.fileMap.get(wName));
                 }
-
-                const isHidden = (folder.songs[i - 1] && folder.songs[i - 1].uiCheck) ? folder.songs[i - 1].uiCheck.checked : false;
 
                 danSongs.push({
                     path: fileName,
@@ -774,13 +790,14 @@
             log(`[${userTitle}] フォルダの構築が完了しました。`, 'ok');
         }
 
-        // 複数フォルダの場合は dan.def を生成
-        let zipFilename = "TaikoNauts_Converted.zip";
+        // ★ ZIPファイル名の最適化
+        let zipFilename = "Converted.zip";
         if (danFolders.length > 1) {
             zip.file("dan.def", defLines.join("\r\n"));
-            log("複数フォルダが検出されたため、dan.defを生成しました。", 'info');
+            zipFilename = `${defTitle}.zip`; // 入力したタイトルそのまま
+            log(`複数フォルダが検出されたため、dan.def (${defTitle}) を生成しました。`, 'info');
         } else if (danFolders.length === 1) {
-            zipFilename = `TaikoNauts_${danFolders[0].uiTitle.value.trim() || danFolders[0].folderName}.zip`;
+            zipFilename = `${danFolders[0].uiTitle.value.trim() || danFolders[0].folderName}.zip`; // 段位名そのまま
         }
 
         const content = await zip.generateAsync({type:"blob"});
