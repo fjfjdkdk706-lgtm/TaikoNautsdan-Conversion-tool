@@ -58,6 +58,7 @@
         }
         .box p { margin: 0; font-size: 1.1rem; color: #7f8c8d; }
         
+        /* 設定エリア */
         #settings-area {
             display: none;
             margin-top: 25px;
@@ -68,6 +69,7 @@
             text-align: left;
         }
         
+        /* フォーム要素 */
         .form-group {
             margin-bottom: 20px;
         }
@@ -168,6 +170,7 @@
             font-weight: bold;
         }
 
+        /* 複数フォルダ対応用の追加デザイン */
         .multi-row {
             display: flex;
             align-items: center;
@@ -196,7 +199,7 @@
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">v5.6 - Exact Plate Edition</div>
+    <div class="subtitle">v5.1 - Multi-Folder Edition</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -217,14 +220,14 @@
                     <option value="4">二級 (4)</option>
                     <option value="5">一級 (5)</option>
                 </optgroup>
-                <optgroup label="青段位 (Index:5-9)">
+                <optgroup label="青段位 (Index:5-14)">
                     <option value="6" selected>初段 (6)</option>
                     <option value="7">二段 (7)</option>
                     <option value="8">三段 (8)</option>
                     <option value="9">四段 (9)</option>
                     <option value="10">五段 (10)</option>
                 </optgroup>
-                <optgroup label="赤段位 (Index:10-14)">
+                <optgroup label="赤段位 (Index:5-14)">
                     <option value="11">六段 (11)</option>
                     <option value="12">七段 (12)</option>
                     <option value="13">八段 (13)</option>
@@ -251,7 +254,7 @@
 
         <div class="form-group">
             <label class="form-label">③ 画像設定 (段位プレート)</label>
-            <div class="form-note">ドロップしたフォルダ内に画像がない場合は、対応するデフォルト画像が自動取得されます。</div>
+            <div class="form-note">ドロップしたフォルダ内の画像から選択します。その他の装飾画像は自動取得されます。</div>
             <div class="image-select-row">
                 <label>・段位プレート (danPlatePath)</label>
                 <select id="plate-select"></select>
@@ -259,7 +262,7 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">④ 隠し曲設定</label>
+            <label class="form-label">④ 隠し曲設定 (タイトルを ??? にする)</label>
             <div id="song-list-container"></div>
         </div>
     </div>
@@ -270,6 +273,9 @@
 </div>
 
 <script>
+    // ==========================================
+    // ★ 固定された GitHub URL 生成関数 ★
+    // ==========================================
     function getGithubUrl(imageName, rankValue) {
         const baseUrl = "https://raw.githubusercontent.com/fjfjdkdk706-lgtm/TaikoNautsdan-Conversion-tool/main/";
         const danIndex = rankValue - 1; 
@@ -285,13 +291,12 @@
 
         if (imageName === "titleplate.png") return `${baseUrl}titleplate_${group}.png`;
         if (imageName === "panelside.png") return `${baseUrl}panelside_${group}.png`;
-        
-        // ★ プレートは段位ごとに変わるように、グループではなくdanIndexを参照
-        if (imageName === "plate.png") return `${baseUrl}plate_${danIndex}.png`; 
+        if (imageName === "miniplate.png") return `${baseUrl}miniplate_${group}.png`;
 
         return `${baseUrl}${imageName}`;
     }
 
+    // --- Elements ---
     const fileInput = document.getElementById('fileInput');
     const dropZone = document.getElementById('dropZone');
     const runBtn = document.getElementById('runBtn');
@@ -299,6 +304,7 @@
     const statusDiv = document.getElementById('status');
     const settingsArea = document.getElementById('settings-area');
     
+    // Original fixed inputs
     const rankSelect = document.getElementById('rank-select');
     const danTitleInput = document.getElementById('dan-title-input');
     const plateSelect = document.getElementById('plate-select');
@@ -314,6 +320,7 @@
         logArea.scrollTop = logArea.scrollHeight;
     }
 
+    // --- File Handling ---
     fileInput.addEventListener('change', e => handleFiles(e.target.files));
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#4a90e2'; });
     dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; });
@@ -392,6 +399,7 @@
     }
 
     function buildMultiFolderUI() {
+        // dan.def 全体タイトル用 UIの生成（複数フォルダ時のみ）
         const existingDefTitle = document.getElementById('def-title-container');
         if (existingDefTitle) existingDefTitle.remove();
 
@@ -412,33 +420,21 @@
         const plateContainer = getOrCreateContainer(plateSelect, 'plate-dynamic-container');
         songListContainer.innerHTML = '';
 
-        const rankKeywords = [
-            { kw: "五級", val: "1" }, { kw: "四級", val: "2" }, { kw: "三級", val: "3" }, { kw: "二級", val: "4" }, { kw: "一級", val: "5" },
-            { kw: "初段", val: "6" }, { kw: "二段", val: "7" }, { kw: "三段", val: "8" }, { kw: "四段", val: "9" }, { kw: "五段", val: "10" },
-            { kw: "六段", val: "11" }, { kw: "七段", val: "12" }, { kw: "八段", val: "13" }, { kw: "九段", val: "14" }, { kw: "十段", val: "15" },
-            { kw: "玄人", val: "16" }, { kw: "名人", val: "17" }, { kw: "超人", val: "18" }, { kw: "達人", val: "19" }, { kw: "外伝", val: "20" }
-        ];
-
         danFolders.forEach((folder, i) => {
             const labelStr = folder.folderName;
 
+            // ① 段位ランク 
             const rankRow = document.createElement('div');
             rankRow.className = 'multi-row';
             const rankSelectClone = rankSelect.cloneNode(true);
             rankSelectClone.style.display = 'block';
             rankSelectClone.className = 'multi-input';
-            
-            const checkStr = folder.parsedTitle || folder.folderName;
-            const foundRank = rankKeywords.find(item => checkStr.includes(item.kw));
-            if (foundRank) {
-                rankSelectClone.value = foundRank.val;
-            }
-
             rankRow.innerHTML = `<div class="multi-label" title="${labelStr}">${labelStr}</div>`;
             rankRow.appendChild(rankSelectClone);
             rankContainer.appendChild(rankRow);
             folder.uiRank = rankSelectClone;
 
+            // ② 段位タイトル
             const titleRow = document.createElement('div');
             titleRow.className = 'multi-row';
             const titleInput = document.createElement('input');
@@ -450,6 +446,7 @@
             titleContainer.appendChild(titleRow);
             folder.uiTitle = titleInput;
 
+            // ③ 画像設定
             const plateRow = document.createElement('div');
             plateRow.className = 'multi-row';
             const plateSel = document.createElement('select');
@@ -467,6 +464,7 @@
             plateContainer.appendChild(plateRow);
             folder.uiPlate = plateSel;
 
+            // ④ 隠し曲設定 (曲名は見せない)
             if (folder.songs.length > 0) {
                 const songGroup = document.createElement('div');
                 songGroup.style.marginBottom = '15px';
@@ -478,6 +476,7 @@
                     cb.type = 'checkbox';
                     cb.value = 'true';
                     const lbl = document.createElement('label');
+                    // ★ 曲名を出さず「X曲目」のみ表示
                     lbl.textContent = `${sIdx + 1}曲目`; 
                     
                     lbl.onclick = () => { cb.checked = !cb.checked; };
@@ -539,6 +538,7 @@
     async function processTaikoNautsConversion() {
         const zip = new JSZip();
         
+        // ★ dan.def 用のタイトル取得
         let defTitle = "段位道場";
         if (danFolders.length > 1) {
             const defTitleInput = document.getElementById('def-title-input');
@@ -558,6 +558,7 @@
             const danIndexValue = rankValue - 1; 
 
             log(`[処理開始] ${userTitle} (Rank Index: ${danIndexValue})`, 'info');
+            defLines.push(`#DIR:${userTitle}`);
 
             let sections = [];
             let buffer = [];
@@ -674,7 +675,8 @@
                 const isHidden = (folder.songs[i - 1] && folder.songs[i - 1].uiCheck) ? folder.songs[i - 1].uiCheck.checked : false;
 
                 let outLines = [];
-                outLines.push(`TITLE:${title}`);
+                // ★ 隠し曲指定された場合、出力するTJA自体のタイトルも???にする
+                outLines.push(`TITLE:${isHidden ? "???" : title}`);
                 if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
                 outLines.push(`BPM:${currentBpm}`);
                 outLines.push(`WAVE:${wave}`);
@@ -736,29 +738,20 @@
                 }
             });
 
-            let finalPlatePath = "plate.png";
-            let isLocalPlate = false;
-
+            // --- 画像処理 ---
+            let finalPlatePath = "Plate.png";
             if (folder.uiPlate.value) {
                 finalPlatePath = folder.uiPlate.value;
                 if (folder.fileMap.has(finalPlatePath)) {
                     rootFolder.file(finalPlatePath, folder.fileMap.get(finalPlatePath));
-                    isLocalPlate = true;
                 }
             } else {
                 let localImages = Array.from(folder.fileMap.keys()).filter(name => /\.(png|jpe?g|bmp)$/i.test(name));
                 if (folder.fileMap.has("Plate.png")) {
-                    finalPlatePath = "Plate.png";
                     rootFolder.file("Plate.png", folder.fileMap.get("Plate.png"));
-                    isLocalPlate = true;
-                } else if (folder.fileMap.has("plate.png")) {
-                    finalPlatePath = "plate.png";
-                    rootFolder.file("plate.png", folder.fileMap.get("plate.png"));
-                    isLocalPlate = true;
                 } else if (localImages.length > 0) {
                     finalPlatePath = localImages[0];
                     rootFolder.file(finalPlatePath, folder.fileMap.get(finalPlatePath));
-                    isLocalPlate = true;
                 }
             }
 
@@ -778,13 +771,9 @@
                 return imageName;
             };
 
-            if (!isLocalPlate) {
-                finalPlatePath = "plate.png";
-                await fetchGitHubImage("plate.png");
-            }
-
             const finalPanelSidePath = await fetchGitHubImage("panelside.png");
             const finalTitlePlatePath = await fetchGitHubImage("titleplate.png");
+            const finalMiniPlatePath = await fetchGitHubImage("miniplate.png");
 
             const danJson = {
                 title: userTitle,
@@ -792,6 +781,7 @@
                 danPlatePath: finalPlatePath,
                 danPanelSidePath: finalPanelSidePath,
                 danTitlePlatePath: finalTitlePlatePath,
+                danMiniPlatePath: finalMiniPlatePath,
                 danSongs: danSongs,
                 conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
                 conditions: finalConditions
@@ -800,13 +790,14 @@
             log(`[${userTitle}] フォルダの構築が完了しました。`, 'ok');
         }
 
+        // ★ ZIPファイル名の最適化
         let zipFilename = "Converted.zip";
         if (danFolders.length > 1) {
             zip.file("dan.def", defLines.join("\r\n"));
-            zipFilename = `${defTitle}.zip`; 
+            zipFilename = `${defTitle}.zip`; // 入力したタイトルそのまま
             log(`複数フォルダが検出されたため、dan.def (${defTitle}) を生成しました。`, 'info');
         } else if (danFolders.length === 1) {
-            zipFilename = `${danFolders[0].uiTitle.value.trim() || danFolders[0].folderName}.zip`; 
+            zipFilename = `${danFolders[0].uiTitle.value.trim() || danFolders[0].folderName}.zip`; // 段位名そのまま
         }
 
         const content = await zip.generateAsync({type:"blob"});
@@ -819,6 +810,7 @@
         log("全処理完了。一括ダウンロードを開始しました。", 'ok');
     }
 
+    // --- Helper Functions ---
     function parseExamLine(line) {
         let content = line.replace(/^EXAM\d*[:\s]*/i, '').trim();
         const parts = content.split(/,\s*/);
