@@ -285,11 +285,36 @@
 
         if (imageName === "titleplate.png") return `${baseUrl}titleplate_${group}.png`;
         if (imageName === "panelside.png") return `${baseUrl}panelside_${group}.png`;
-        
-        // ★ プレートは段位ごとに変わるように、グループではなくdanIndexを参照
         if (imageName === "plate.png") return `${baseUrl}plate_${danIndex}.png`; 
 
         return `${baseUrl}${imageName}`;
+    }
+
+    // 画像をきれいに拡大（1.5倍）するヘルパー関数
+    function resizeImage(fileOrBlob, scale) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(fileOrBlob);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => {
+                    if (blob) resolve(blob);
+                    else reject(new Error("Canvas to Blob 変換に失敗しました。"));
+                }, 'image/png');
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error("画像の読み込みに失敗しました。"));
+            };
+            img.src = url;
+        });
     }
 
     const fileInput = document.getElementById('fileInput');
@@ -738,61 +763,91 @@
 
             let finalPlatePath = "plate.png";
             let isLocalPlate = false;
+            let plateBlob = null;
 
             if (folder.uiPlate.value) {
                 finalPlatePath = folder.uiPlate.value;
                 if (folder.fileMap.has(finalPlatePath)) {
-                    rootFolder.file(finalPlatePath, folder.fileMap.get(finalPlatePath));
+                    plateBlob = folder.fileMap.get(finalPlatePath);
                     isLocalPlate = true;
                 }
             } else {
                 let localImages = Array.from(folder.fileMap.keys()).filter(name => /\.(png|jpe?g|bmp)$/i.test(name));
                 if (folder.fileMap.has("Plate.png")) {
                     finalPlatePath = "Plate.png";
-                    rootFolder.file("Plate.png", folder.fileMap.get("Plate.png"));
+                    plateBlob = folder.fileMap.get("Plate.png");
                     isLocalPlate = true;
                 } else if (folder.fileMap.has("plate.png")) {
                     finalPlatePath = "plate.png";
-                    rootFolder.file("plate.png", folder.fileMap.get("plate.png"));
+                    plateBlob = folder.fileMap.get("plate.png");
                     isLocalPlate = true;
                 } else if (localImages.length > 0) {
                     finalPlatePath = localImages[0];
-                    rootFolder.file(finalPlatePath, folder.fileMap.get(finalPlatePath));
+                    plateBlob = folder.fileMap.get(finalPlatePath);
                     isLocalPlate = true;
                 }
             }
 
-            const fetchGitHubImage = async (imageName) => {
-                const targetUrl = getGithubUrl(imageName, rankValue);
+            if (!isLocalPlate) {
+                finalPlatePath = "plate.png";
+                const targetUrl = getGithubUrl("plate.png", rankValue);
                 try {
                     const res = await fetch(targetUrl);
                     if (res.ok) {
-                        const blob = await res.blob();
-                        rootFolder.file(imageName, blob);
+                        plateBlob = await res.blob();
                     } else {
-                        log(`[${userTitle}] ${imageName} の取得に失敗しスキップしました。`, 'warn');
+                        log(`[${userTitle}] plate.png の取得に失敗しました。`, 'warn');
                     }
                 } catch (err) {
-                    log(`通信エラー: ${imageName} (${err.message})`, 'err');
+                    log(`通信エラー: plate.png (${err.message})`, 'err');
                 }
-                return imageName;
-            };
-
-            if (!isLocalPlate) {
-                finalPlatePath = "plate.png";
-                await fetchGitHubImage("plate.png");
             }
 
-            const finalPanelSidePath = await fetchGitHubImage("panelside.png");
-            const finalTitlePlatePath = await fetchGitHubImage("titleplate.png");
+            // ★ danplate画像を自動で1.5倍に拡大してZIPに書き込む
+            if (plateBlob) {
+                try {
+                    log(`[${userTitle}] plateのサイズを1.5倍にリサイズ中...`, 'info');
+                    const resizedPlateBlob = await resizeImage(plateBlob, 1.5);
+                    rootFolder.file(finalPlatePath, resizedPlateBlob);
+                } catch (err) {
+                    log(`[${userTitle}] plateのリサイズに失敗したため、元のサイズで保存します。(${err.message})`, 'warn');
+                    rootFolder.file(finalPlatePath, plateBlob);
+                }
+            }
 
-            // ★ danMiniPlatePath をJSON項目として定義（画像処理・参照はしないため空文字）
+            let finalPanelSidePath = "";
+            let finalTitlePlatePath = "";
+
+            // ★ 外伝（rankValue === 20）の時だけ、GitHubからtitleplateとpanelsideを取得する
+            if (rankValue === 20) {
+                const fetchGitHubImage = async (imageName) => {
+                    const targetUrl = getGithubUrl(imageName, rankValue);
+                    try {
+                        const res = await fetch(targetUrl);
+                        if (res.ok) {
+                            const blob = await res.blob();
+                            rootFolder.file(imageName, blob);
+                            return imageName;
+                        } else {
+                            log(`[${userTitle}] ${imageName} の取得に失敗しスキップしました。`, 'warn');
+                        }
+                    } catch (err) {
+                        log(`通信エラー: ${imageName} (${err.message})`, 'err');
+                    }
+                    return "";
+                };
+
+                finalPanelSidePath = await fetchGitHubImage("panelside.png");
+                finalTitlePlatePath = await fetchGitHubImage("titleplate.png");
+            }
+
+            // ★ 外伝以外では、danPanelSidePath と danTitlePlatePath は空にする
             const danJson = {
                 title: userTitle,
                 danIndex: danIndexValue,
                 danPlatePath: finalPlatePath,
-                danPanelSidePath: finalPanelSidePath,
-                danTitlePlatePath: finalTitlePlatePath,
+                danPanelSidePath: rankValue === 20 ? finalPanelSidePath : "",
+                danTitlePlatePath: rankValue === 20 ? finalTitlePlatePath : "",
                 danMiniPlatePath: "", 
                 danSongs: danSongs,
                 conditionGauge: globalExam.gauge || { red: 80, gold: 100 },
