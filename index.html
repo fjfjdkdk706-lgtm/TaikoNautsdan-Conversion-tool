@@ -196,7 +196,7 @@
 
 <div class="container">
     <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">v5.7 - Exact Plate Edition</div>
+    <div class="subtitle">v5.8 - Exact Plate Edition</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p>ここにフォルダをドラッグ＆ドロップ</p>
@@ -290,7 +290,6 @@
         return `${baseUrl}${imageName}`;
     }
 
-    // 画像をきれいに拡大（1.5倍）するヘルパー関数
     function resizeImage(fileOrBlob, scale) {
         return new Promise((resolve, reject) => {
             const img = new Image();
@@ -603,6 +602,8 @@
 
             let globalExam = { gauge: null, conditions: {} }; 
             let songExams = []; 
+            // ★ EXAMのTJA内での出現順番を保持するための配列
+            let examOrder = []; 
 
             if (sections.length > 0) {
                 sections[0].lines.forEach(l => {
@@ -610,8 +611,12 @@
                     if (line.toUpperCase().startsWith('EXAM')) {
                         const parsed = parseExamLine(line);
                         if (parsed) {
-                            if (parsed.isGauge) globalExam.gauge = parsed.val;
-                            else globalExam.conditions[parsed.type] = parsed.val; 
+                            if (parsed.isGauge) {
+                                globalExam.gauge = parsed.val;
+                            } else {
+                                globalExam.conditions[parsed.type] = parsed.val; 
+                                if (!examOrder.includes(parsed.type)) examOrder.push(parsed.type);
+                            }
                         }
                     }
                 });
@@ -620,7 +625,9 @@
             const rootFolder = zip.folder(userTitle);
 
             let danSongs = [];
-            let currentBpm = 0;
+            
+            // ★ 最初のBPM（globalBpm）を取得
+            let globalBpm = 120;
             let balloonCursor = 0;
             
             let globalBalloons = [];
@@ -634,10 +641,12 @@
 
             if (sections.length > 0) {
                 sections[0].lines.forEach(l => {
-                    if(l.trim().toUpperCase().startsWith('BPM:')) currentBpm = parseFloat(l.split(':')[1]);
+                    if(l.trim().toUpperCase().startsWith('BPM:')) globalBpm = parseFloat(l.split(':')[1]);
                 });
                 balloonCursor += count79(sections[0].lines);
             }
+
+            let currentBpm = globalBpm; // 各曲をまたいで引き継ぐ用のBPM状態
 
             for (let i = 1; i < sections.length; i++) {
                 const section = sections[i];
@@ -663,7 +672,10 @@
                     const t = l.trim();
                     if (t.toUpperCase().startsWith('EXAM')) {
                         const parsed = parseExamLine(t);
-                        if (parsed && !parsed.isGauge) myExam[parsed.type] = parsed.val;
+                        if (parsed && !parsed.isGauge) {
+                            myExam[parsed.type] = parsed.val;
+                            if (!examOrder.includes(parsed.type)) examOrder.push(parsed.type);
+                        }
                     }
                 });
                 songExams[i] = myExam;
@@ -675,6 +687,11 @@
                     else myBalloons.push(5);
                 }
 
+                // ★ 曲の初速用BPM
+                // 1曲目の場合かつセクション内にBPM指定がないときは、globalBpmを引き継ぐ
+                let songStartBpm = (i === 1) ? globalBpm : currentBpm; 
+                let hasFoundBpmChange = false;
+
                 let bodyLines = [];
                 let totalDelay = 0;
                 section.lines.forEach(l => {
@@ -684,12 +701,19 @@
                     if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
                         t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:') || t.startsWith('TITLE:')) return;
                     
+                    if (t.startsWith('BPM:')) {
+                        // 曲セクションのヘッダでBPMが再指定されている場合
+                        if (!hasFoundBpmChange) songStartBpm = parseFloat(l.split(':')[1]);
+                        return;
+                    }
+
                     if (t.startsWith('#DELAY')) {
                         const val = parseFloat(l.trim().split(/\s+/)[1]);
                         if (!isNaN(val)) totalDelay += val;
                         return;
                     }
                     if (t.startsWith('#BPMCHANGE')) {
+                        hasFoundBpmChange = true;
                         const parts = l.trim().split(/\s+/);
                         if (parts[1]) currentBpm = parseFloat(parts[1]);
                     }
@@ -701,7 +725,10 @@
                 let outLines = [];
                 outLines.push(`TITLE:${title}`);
                 if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
-                outLines.push(`BPM:${currentBpm}`);
+                
+                // ★ 修正: その曲の正しい初速BPMを出力する
+                outLines.push(`BPM:${songStartBpm}`);
+                
                 outLines.push(`WAVE:${wave}`);
                 outLines.push(`OFFSET:${-totalDelay}`);
                 outLines.push(`GENRE:${genre}`);
@@ -734,12 +761,9 @@
             }
 
             let finalConditions = [];
-            const allTypes = new Set([
-                ...Object.keys(globalExam.conditions),
-                ...songExams.flatMap(e => e ? Object.keys(e) : [])
-            ]);
 
-            allTypes.forEach(type => {
+            // ★ TJAでの出現順番（examOrder）通りに conditions を書き出す
+            examOrder.forEach(type => {
                 let hasIndividual = false;
                 for(let i=1; i < sections.length; i++) {
                     if(songExams[i] && songExams[i][type]) { hasIndividual = true; break; }
@@ -803,7 +827,6 @@
                 }
             }
 
-            // ★ danplate画像を自動で1.5倍に拡大してZIPに書き込む
             if (plateBlob) {
                 try {
                     log(`[${userTitle}] plateのサイズを1.5倍にリサイズ中...`, 'info');
@@ -818,7 +841,6 @@
             let finalPanelSidePath = "";
             let finalTitlePlatePath = "";
 
-            // ★ 外伝（rankValue === 20）の時だけ、GitHubからtitleplateとpanelsideを取得する
             if (rankValue === 20) {
                 const fetchGitHubImage = async (imageName) => {
                     const targetUrl = getGithubUrl(imageName, rankValue);
@@ -841,7 +863,6 @@
                 finalTitlePlatePath = await fetchGitHubImage("titleplate.png");
             }
 
-            // ★ 外伝以外では、danPanelSidePath と danTitlePlatePath は空にする
             const danJson = {
                 title: userTitle,
                 danIndex: danIndexValue,
