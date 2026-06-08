@@ -30,6 +30,20 @@
             padding: 40px;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            position: relative;
+        }
+        .lang-switcher {
+            position: absolute;
+            top: 20px;
+            right: 40px;
+        }
+        .lang-switcher select {
+            width: auto;
+            padding: 5px 10px;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            cursor: pointer;
         }
         h1 {
             text-align: center;
@@ -195,11 +209,18 @@
 <body>
 
 <div class="container">
-    <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">v5.9 - Exact Plate Edition</div>
+    <div class="lang-switcher">
+        <select id="lang-select">
+            <option value="ja" selected>日本語</option>
+            <option value="en">English</option>
+        </select>
+    </div>
+
+    <h1 data-i18n="title">TaikoNauts 変換ツール</h1>
+    <div class="subtitle">v6.0 - Exact Plate & Multi-Language Edition</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <p>ここにフォルダをドラッグ＆ドロップ</p>
+        <p data-i18n="dropZone">ここにフォルダをドラッグ＆ドロップ</p>
         <input type="file" id="fileInput" webkitdirectory directory multiple style="display:none">
     </div>
     <div id="status" style="text-align:center; margin-top:15px; font-weight:bold;"></div>
@@ -207,8 +228,8 @@
     <div id="settings-area">
         
        <div class="form-group">
-            <label class="form-label">① 段位ランクを選択</label>
-            <div class="form-note">DanIndex(0-18)を決定します。</div>
+            <label class="form-label" data-i18n="rankLabel">① 段位ランクを選択</label>
+            <div class="form-note" data-i18n="rankNote">DanIndex(0-18)を決定します。</div>
             <select id="rank-select">
                 <optgroup label="級位 ( Index:0-4)">
                     <option value="1">五級 (1)</option>
@@ -244,32 +265,150 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">② 段位タイトル (フォルダ名)</label>
-            <div class="form-note">フォルダ名とJSONのタイトルになります。</div>
+            <label class="form-label" data-i18n="titleLabel">② 段位タイトル (フォルダ名)</label>
+            <div class="form-note" data-i18n="titleNote">フォルダ名とJSONのタイトルになります。</div>
             <input type="text" id="dan-title-input" placeholder="段位名を入力">
         </div>
 
         <div class="form-group">
-            <label class="form-label">③ 画像設定 (段位プレート)</label>
-            <div class="form-note">ドロップしたフォルダ内に画像がない場合は、対応するデフォルト画像が自動取得されます。</div>
+            <label class="form-label" data-i18n="imageLabel">③ 画像設定 (段位プレート)</label>
+            <div class="form-note" data-i18n="imageNote">ドロップしたフォルダ内に画像がない場合は、対応するデフォルト画像が自動取得されます。</div>
             <div class="image-select-row">
-                <label>・段位プレート (danPlatePath)</label>
+                <label data-i18n="plateLabel">・段位プレート (danPlatePath)</label>
                 <select id="plate-select"></select>
             </div>
         </div>
 
         <div class="form-group">
-            <label class="form-label">④ 隠し曲設定</label>
+            <label class="form-label" data-i18n="hiddenLabel">④ 隠し曲設定</label>
             <div id="song-list-container"></div>
         </div>
     </div>
 
-    <button id="runBtn">変換開始</button>
+    <button id="runBtn" data-i18n="btnRun">変換開始</button>
 
-    <div id="log">準備完了...</div>
+    <div id="log" data-i18n="logReady">準備完了...</div>
 </div>
 
 <script>
+    // 多言語データ辞書
+    const i18n = {
+        ja: {
+            title: "TaikoNauts 変換ツール",
+            dropZone: "ここにフォルダをドラッグ＆ドロップ",
+            rankLabel: "① 段位ランクを選択",
+            rankNote: "DanIndex(0-18)を決定します。",
+            titleLabel: "② 段位タイトル (フォルダ名)",
+            titleNote: "フォルダ名とJSONのタイトルになります。",
+            titlePlaceholder: "段位名を入力",
+            imageLabel: "③ 画像設定 (段位プレート)",
+            imageNote: "ドロップしたフォルダ内に画像がない場合は、対応するデフォルト画像が自動取得されます。",
+            plateLabel: "・段位プレート (danPlatePath)",
+            plateAuto: "(自動検索して適用)",
+            hiddenLabel: "④ 隠し曲設定",
+            songSuffix: "曲目",
+            btnRun: "変換開始",
+            btnProcessing: "処理中...",
+            btnComplete: "完了！",
+            btnError: "エラー",
+            logReady: "準備完了...",
+            defTitleLabel: "★ コース全体タイトル (dan.def)",
+            defTitleNote: "ゲーム内に表示される全体のフォルダ名になります。また、ダウンロードされるZIPファイル名にも適用されます。",
+            defTitlePlaceholder: "段位道場",
+            statusDetected: "{count} 個の段位フォルダを検出",
+            logDetected: "{count} 個のTJAを検出しました。一括設定が可能です。",
+            logNoTja: "エラー: フォルダ内にTJAファイルが見つかりません。",
+            logParseError: "[{folder}] 解析エラー: {msg}",
+            logProcessing: "[処理開始] {title} (Rank Index: {index})",
+            logResizing: "[{title}] plateのサイズを1.5倍にリサイズ中...",
+            logResizeFail: "[{title}] plateのリサイズに失敗したため、元のサイズで保存します。({msg})",
+            logPlateFail: "[{title}] plate.png の取得に失敗しました。",
+            logNetError: "通信エラー: {img} ({msg})",
+            logFolderComplete: "[{title}] フォルダの構築が完了しました。",
+            logDefGenerated: "複数フォルダが検出されたため、dan.def ({title}) を生成しました。",
+            logAllComplete: "全処理完了。一括ダウンロードを開始しました。"
+        },
+        en: {
+            title: "TaikoNauts Conversion Tool",
+            dropZone: "Drag & Drop Folder Here",
+            rankLabel: "① Select Dan Rank",
+            rankNote: "Determines DanIndex (0-18).",
+            titleLabel: "② Dan Title (Folder Name)",
+            titleNote: "Used as the folder name and JSON title.",
+            titlePlaceholder: "Enter Dan Name",
+            imageLabel: "③ Image Settings (Dan Plate)",
+            imageNote: "If no image is in the folder, the corresponding default image is fetched automatically.",
+            plateLabel: "- Dan Plate (danPlatePath)",
+            plateAuto: "(Auto-detect and apply)",
+            hiddenLabel: "④ Hidden Song Settings",
+            songSuffix: " Song",
+            btnRun: "Start Conversion",
+            btnProcessing: "Processing...",
+            btnComplete: "Complete!",
+            btnError: "Error",
+            logReady: "Ready...",
+            defTitleLabel: "★ Overall Course Title (dan.def)",
+            defTitleNote: "The overall folder name displayed in-game. Also applies to the downloaded ZIP filename.",
+            defTitlePlaceholder: "Dan Dojo",
+            statusDetected: "{count} folder(s) detected",
+            logDetected: "{count} TJA file(s) detected. Bulk configuration is available.",
+            logNoTja: "Error: No TJA files found in the folder.",
+            logParseError: "[{folder}] Parse Error: {msg}",
+            logProcessing: "[Processing Started] {title} (Rank Index: {index})",
+            logResizing: "[{title}] Resizing plate to 1.5x...",
+            logResizeFail: "[{title}] Failed to resize plate, saved with original size. ({msg})",
+            logPlateFail: "[{title}] Failed to fetch plate.png.",
+            logNetError: "Network Error: {img} ({msg})",
+            logFolderComplete: "[{title}] Folder structure completed.",
+            logDefGenerated: "Multiple folders detected. Generated dan.def ({title}).",
+            logAllComplete: "All processes completed. Bulk download started."
+        }
+    };
+
+    let currentLang = "ja";
+
+    function getMsg(key, vars = {}) {
+        let msg = i18n[currentLang][key] || i18n["ja"][key] || key;
+        for (let v in vars) {
+            msg = msg.replace(`{${v}}`, vars[v]);
+        }
+        return msg;
+    }
+
+    function setLanguage(lang) {
+        currentLang = lang;
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (i18n[lang][key]) {
+                el.textContent = i18n[lang][key];
+            }
+        });
+        document.getElementById('dan-title-input').placeholder = i18n[lang].titlePlaceholder;
+        
+        const defTitleInput = document.getElementById('def-title-input');
+        if (defTitleInput) {
+            defTitleInput.placeholder = i18n[lang].defTitlePlaceholder;
+        }
+        updateRunBtnText();
+    }
+
+    let btnState = "ready"; // ready, processing, complete, error
+    function updateRunBtnText() {
+        const btn = document.getElementById('runBtn');
+        if (btnState === "ready") btn.textContent = getMsg("btnRun");
+        else if (btnState === "processing") btn.textContent = getMsg("btnProcessing");
+        else if (btnState === "complete") btn.textContent = getMsg("btnComplete");
+        else if (btnState === "error") btn.textContent = getMsg("btnError");
+    }
+
+    document.getElementById('lang-select').addEventListener('change', (e) => {
+        setLanguage(e.target.value);
+        if (danFolders.length > 0) {
+            buildMultiFolderUI();
+            statusDiv.textContent = getMsg("statusDetected", { count: danFolders.length });
+        }
+    });
+
     function getGithubUrl(imageName, rankValue) {
         const baseUrl = "https://raw.githubusercontent.com/fjfjdkdk706-lgtm/TaikoNautsdan-Conversion-tool/main/";
         const danIndex = rankValue - 1; 
@@ -305,12 +444,12 @@
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 canvas.toBlob((blob) => {
                     if (blob) resolve(blob);
-                    else reject(new Error("Canvas to Blob 変換に失敗しました。"));
+                    else reject(new Error("Canvas to Blob failed."));
                 }, 'image/png');
             };
             img.onerror = () => {
                 URL.revokeObjectURL(url);
-                reject(new Error("画像の読み込みに失敗しました。"));
+                reject(new Error("Image load failed."));
             };
             img.src = url;
         });
@@ -388,8 +527,8 @@
         }
 
         if (danFolders.length > 0) {
-            statusDiv.textContent = `${danFolders.length} 個の段位フォルダを検出`;
-            log(`${danFolders.length} 個のTJAを検出しました。一括設定が可能です。`, 'ok');
+            statusDiv.textContent = getMsg("statusDetected", { count: danFolders.length });
+            log(getMsg("logDetected", { count: danFolders.length }), 'ok');
             
             for (let folder of danFolders) {
                 await scanSongsAndTitleForFolder(folder);
@@ -399,7 +538,7 @@
             settingsArea.style.display = 'block';
             runBtn.classList.add('active');
         } else {
-            log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
+            log(getMsg("logNoTja"), 'err');
         }
     }
 
@@ -424,9 +563,9 @@
             defTitleContainer.id = 'def-title-container';
             defTitleContainer.className = 'form-group';
             defTitleContainer.innerHTML = `
-                <label class="form-label" style="color: #e74c3c;">★ コース全体タイトル (dan.def)</label>
-                <div class="form-note">ゲーム内に表示される全体のフォルダ名になります。また、ダウンロードされるZIPファイル名にも適用されます。</div>
-                <input type="text" id="def-title-input" placeholder="段位道場" value="段位道場">
+                <label class="form-label" style="color: #e74c3c;">${getMsg("defTitleLabel")}</label>
+                <div class="form-note">${getMsg("defTitleNote")}</div>
+                <input type="text" id="def-title-input" placeholder="${getMsg("defTitlePlaceholder")}" value="段位道場">
             `;
             settingsArea.insertBefore(defTitleContainer, settingsArea.firstChild);
         }
@@ -478,7 +617,7 @@
             plateRow.className = 'multi-row';
             const plateSel = document.createElement('select');
             plateSel.className = 'multi-input';
-            plateSel.innerHTML = `<option value="">(自動検索して適用)</option>`;
+            plateSel.innerHTML = `<option value="">${getMsg("plateAuto")}</option>`;
             folder.images.forEach(img => {
                 const opt = document.createElement('option');
                 opt.value = img;
@@ -502,7 +641,7 @@
                     cb.type = 'checkbox';
                     cb.value = 'true';
                     const lbl = document.createElement('label');
-                    lbl.textContent = `${sIdx + 1}曲目`; 
+                    lbl.textContent = `${sIdx + 1}${getMsg("songSuffix")}`; 
                     
                     lbl.onclick = () => { cb.checked = !cb.checked; };
                     
@@ -538,24 +677,28 @@
             }
             folder.parsedTitle = foundTitle;
         } catch(e) {
-            log(`[${folder.folderName}] 解析エラー: ${e.message}`, 'warn');
+            log(getMsg("logParseError", { folder: folder.folderName, msg: e.message }), 'warn');
         }
     }
 
     runBtn.addEventListener('click', async () => {
         if (danFolders.length === 0) return;
-        runBtn.textContent = "処理中...";
+        btnState = "processing";
+        updateRunBtnText();
         runBtn.classList.remove('active');
         try {
             await processTaikoNautsConversion();
-            runBtn.textContent = "完了！";
+            btnState = "complete";
+            updateRunBtnText();
         } catch (e) {
             console.error(e);
-            log(`処理失敗: ${e.message}`, 'err');
-            runBtn.textContent = "エラー";
+            log(`Failed: ${e.message}`, 'err');
+            btnState = "error";
+            updateRunBtnText();
         }
         setTimeout(() => {
-            runBtn.textContent = "変換開始";
+            btnState = "ready";
+            updateRunBtnText();
             runBtn.classList.add('active');
         }, 3000);
     });
@@ -581,7 +724,7 @@
             const userTitle = folder.uiTitle.value.trim() || folder.folderName;
             const danIndexValue = rankValue - 1; 
 
-            log(`[処理開始] ${userTitle} (Rank Index: ${danIndexValue})`, 'info');
+            log(getMsg("logProcessing", { title: userTitle, index: danIndexValue }), 'info');
 
             let sections = [];
             let buffer = [];
@@ -602,7 +745,6 @@
 
             let globalExam = { gauge: null, conditions: {} }; 
             let songExams = []; 
-            // ★ EXAMのインデックスを保持するリスト（ソート用）
             let examOrderList = []; 
 
             if (sections.length > 0) {
@@ -630,8 +772,6 @@
             const rootFolder = zip.folder(userTitle);
 
             let danSongs = [];
-            
-            // ★ 初速BPMを取得
             let globalBpm = 120;
             let balloonCursor = 0;
             
@@ -732,10 +872,7 @@
                 let outLines = [];
                 outLines.push(`TITLE:${title}`);
                 if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
-                
-                // ★ その曲の初速BPMを出力する
                 outLines.push(`BPM:${songStartBpm}`);
-                
                 outLines.push(`WAVE:${wave}`);
                 outLines.push(`OFFSET:${-totalDelay}`);
                 outLines.push(`GENRE:${genre}`);
@@ -768,8 +905,6 @@
             }
 
             let finalConditions = [];
-            
-            // ★ EXAMのインデックス番号順にソートして出力する
             examOrderList.sort((a, b) => a.index - b.index);
 
             examOrderList.forEach(item => {
@@ -830,20 +965,20 @@
                     if (res.ok) {
                         plateBlob = await res.blob();
                     } else {
-                        log(`[${userTitle}] plate.png の取得に失敗しました。`, 'warn');
+                        log(getMsg("logPlateFail", { title: userTitle }), 'warn');
                     }
                 } catch (err) {
-                    log(`通信エラー: plate.png (${err.message})`, 'err');
+                    log(getMsg("logNetError", { img: "plate.png", msg: err.message }), 'err');
                 }
             }
 
             if (plateBlob) {
                 try {
-                    log(`[${userTitle}] plateのサイズを1.5倍にリサイズ中...`, 'info');
+                    log(getMsg("logResizing", { title: userTitle }), 'info');
                     const resizedPlateBlob = await resizeImage(plateBlob, 1.5);
                     rootFolder.file(finalPlatePath, resizedPlateBlob);
                 } catch (err) {
-                    log(`[${userTitle}] plateのリサイズに失敗したため、元のサイズで保存します。(${err.message})`, 'warn');
+                    log(getMsg("logResizeFail", { title: userTitle, msg: err.message }), 'warn');
                     rootFolder.file(finalPlatePath, plateBlob);
                 }
             }
@@ -861,10 +996,10 @@
                             rootFolder.file(imageName, blob);
                             return imageName;
                         } else {
-                            log(`[${userTitle}] ${imageName} の取得に失敗しスキップしました。`, 'warn');
+                            log(`[${userTitle}] Failed to fetch ${imageName}.`, 'warn');
                         }
                     } catch (err) {
-                        log(`通信エラー: ${imageName} (${err.message})`, 'err');
+                        log(getMsg("logNetError", { img: imageName, msg: err.message }), 'err');
                     }
                     return "";
                 };
@@ -885,14 +1020,14 @@
                 conditions: finalConditions
             };
             rootFolder.file("dan.json", JSON.stringify(danJson, null, 2));
-            log(`[${userTitle}] フォルダの構築が完了しました。`, 'ok');
+            log(getMsg("logFolderComplete", { title: userTitle }), 'ok');
         }
 
         let zipFilename = "Converted.zip";
         if (danFolders.length > 1) {
             zip.file("dan.def", defLines.join("\r\n"));
             zipFilename = `${defTitle}.zip`; 
-            log(`複数フォルダが検出されたため、dan.def (${defTitle}) を生成しました。`, 'info');
+            log(getMsg("logDefGenerated", { title: defTitle }), 'info');
         } else if (danFolders.length === 1) {
             zipFilename = `${danFolders[0].uiTitle.value.trim() || danFolders[0].folderName}.zip`; 
         }
@@ -904,10 +1039,9 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        log("全処理完了。一括ダウンロードを開始しました。", 'ok');
+        log(getMsg("logAllComplete"), 'ok');
     }
 
-    // ★ EXAMのインデックス番号を抽出できるように正規表現を修正
     function parseExamLine(line) {
         let content = line.replace(/^#?EXAM\d*[:\s]*/i, '').trim();
         const match = line.match(/^#?EXAM(\d+)/i);
