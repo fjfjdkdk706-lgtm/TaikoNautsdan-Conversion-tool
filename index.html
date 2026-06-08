@@ -30,7 +30,25 @@
             padding: 40px;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            position: relative;
         }
+        
+        /* 言語選択用スタイル */
+        .lang-selector {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+        .lang-selector select {
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #bdc3c7;
+            background: #fff;
+            font-size: 0.9rem;
+            cursor: pointer;
+            width: auto;
+        }
+
         h1 {
             text-align: center;
             margin-bottom: 10px;
@@ -195,11 +213,18 @@
 <body>
 
 <div class="container">
-    <h1>TaikoNauts 変換ツール</h1>
-    <div class="subtitle">v5.8 - Exact Plate Edition</div>
+    <div class="lang-selector">
+        <select id="lang-select">
+            <option value="ja">日本語</option>
+            <option value="en">English</option>
+        </select>
+    </div>
+
+    <h1 data-i18n="app_title">TaikoNauts 変換ツール</h1>
+    <div class="subtitle" data-i18n="app_subtitle">v6.0 - Multi-Language Edition</div>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <p>ここにフォルダをドラッグ＆ドロップ</p>
+        <p data-i18n="drop_text">ここにフォルダをドラッグ＆ドロップ</p>
         <input type="file" id="fileInput" webkitdirectory directory multiple style="display:none">
     </div>
     <div id="status" style="text-align:center; margin-top:15px; font-weight:bold;"></div>
@@ -207,8 +232,8 @@
     <div id="settings-area">
         
        <div class="form-group">
-            <label class="form-label">① 段位ランクを選択</label>
-            <div class="form-note">DanIndex(0-18)を決定します。</div>
+            <label class="form-label" data-i18n="rank_label">① 段位ランクを選択</label>
+            <div class="form-note" data-i18n="rank_note">DanIndex(0-18)を決定します。</div>
             <select id="rank-select">
                 <optgroup label="級位 ( Index:0-4)">
                     <option value="1">五級 (1)</option>
@@ -244,32 +269,185 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">② 段位タイトル (フォルダ名)</label>
-            <div class="form-note">フォルダ名とJSONのタイトルになります。</div>
-            <input type="text" id="dan-title-input" placeholder="段位名を入力">
+            <label class="form-label" data-i18n="title_label">② 段位タイトル (フォルダ名)</label>
+            <div class="form-note" data-i18n="title_note">フォルダ名とJSONのタイトルになります。</div>
+            <input type="text" id="dan-title-input" placeholder="段位名を入力" data-i18n-ph="title_ph">
         </div>
 
         <div class="form-group">
-            <label class="form-label">③ 画像設定 (段位プレート)</label>
-            <div class="form-note">ドロップしたフォルダ内に画像がない場合は、対応するデフォルト画像が自動取得されます。</div>
+            <label class="form-label" data-i18n="plate_label">③ 画像設定 (段位プレート)</label>
+            <div class="form-note" data-i18n="plate_note">ドロップしたフォルダ内に画像がない場合は、対応するデフォルト画像が自動取得されます。</div>
             <div class="image-select-row">
-                <label>・段位プレート (danPlatePath)</label>
+                <label data-i18n="plate_sub">・段位プレート (danPlatePath)</label>
                 <select id="plate-select"></select>
             </div>
         </div>
 
         <div class="form-group">
-            <label class="form-label">④ 隠し曲設定</label>
+            <label class="form-label" data-i18n="hidden_label">④ 隠し曲設定</label>
             <div id="song-list-container"></div>
         </div>
     </div>
 
-    <button id="runBtn">変換開始</button>
+    <button id="runBtn" data-i18n="btn_start">変換開始</button>
 
-    <div id="log">準備完了...</div>
+    <div id="log" data-i18n="log_ready">準備完了...</div>
 </div>
 
 <script>
+    // ==========================================
+    // ★ 翻訳用辞書データ ★
+    // ==========================================
+    const i18n = {
+        ja: {
+            app_title: "TaikoNauts 変換ツール",
+            app_subtitle: "v6.0 - Multi-Language Edition",
+            drop_text: "ここにフォルダをドラッグ＆ドロップ",
+            rank_label: "① 段位ランクを選択",
+            rank_note: "DanIndex(0-18)を決定します。",
+            title_label: "② 段位タイトル (フォルダ名)",
+            title_note: "フォルダ名とJSONのタイトルになります。",
+            title_ph: "段位名を入力",
+            plate_label: "③ 画像設定 (段位プレート)",
+            plate_note: "ドロップしたフォルダ内に画像がない場合は、対応するデフォルト画像が自動取得されます。",
+            plate_sub: "・段位プレート (danPlatePath)",
+            hidden_label: "④ 隠し曲設定",
+            btn_start: "変換開始",
+            log_ready: "準備完了...",
+            
+            def_title: "★ コース全体タイトル (dan.def)",
+            def_note: "ゲーム内に表示される全体のフォルダ名になります。また、ダウンロードされるZIPファイル名にも適用されます。",
+            def_ph: "段位道場",
+
+            opt_auto: "(自動検索して適用)",
+            song_nth: "{n}曲目",
+
+            log_found_folder: "{n} 個の段位フォルダを検出",
+            log_found_tja: "{n} 個のTJAを検出しました。一括設定が可能です。",
+            log_err_notja: "エラー: フォルダ内にTJAファイルが見つかりません。",
+            log_proc_start: "[処理開始] {t} (Rank Index: {i})",
+            log_resize_start: "[{t}] plateのサイズを1.5倍にリサイズ中...",
+            log_resize_err: "[{t}] plateのリサイズに失敗したため、元のサイズで保存します。({e})",
+            log_fetch_err: "[{t}] {img} の取得に失敗しスキップしました。",
+            log_net_err: "通信エラー: {img} ({e})",
+            log_folder_done: "[{t}] フォルダの構築が完了しました。",
+            log_def_gen: "複数フォルダが検出されたため、dan.def ({t}) を生成しました。",
+            log_all_done: "全処理完了。一括ダウンロードを開始しました。",
+
+            btn_proc: "処理中...",
+            btn_done: "完了！",
+            btn_err: "エラー"
+        },
+        en: {
+            app_title: "TaikoNauts Conversion Tool",
+            app_subtitle: "v6.0 - Multi-Language Edition",
+            drop_text: "Drag & Drop folders here",
+            rank_label: "1. Select Dan Rank",
+            rank_note: "Determines the DanIndex (0-18).",
+            title_label: "2. Dan Title (Folder Name)",
+            title_note: "Used as folder name and JSON title.",
+            title_ph: "Enter Dan Name",
+            plate_label: "3. Image Settings (Dan Plate)",
+            plate_note: "If no image is found in the folder, default images will be fetched automatically.",
+            plate_sub: "- Dan Plate (danPlatePath)",
+            hidden_label: "4. Hidden Song Settings",
+            btn_start: "Start Conversion",
+            log_ready: "Ready...",
+
+            def_title: "★ Global Course Title (dan.def)",
+            def_note: "This will be the global folder name in-game and the output ZIP filename.",
+            def_ph: "Dan Dojo",
+
+            opt_auto: "(Auto-detect and apply)",
+            song_nth: "Song {n}",
+
+            log_found_folder: "Detected {n} Dan folder(s)",
+            log_found_tja: "Detected {n} TJA(s). Bulk configuration is available.",
+            log_err_notja: "Error: No TJA files found in the folder.",
+            log_proc_start: "[Start] {t} (Rank Index: {i})",
+            log_resize_start: "[{t}] Resizing plate to 1.5x...",
+            log_resize_err: "[{t}] Plate resize failed, saving original size. ({e})",
+            log_fetch_err: "[{t}] Failed to fetch {img}, skipping.",
+            log_net_err: "Network Error: {img} ({e})",
+            log_folder_done: "[{t}] Folder construction completed.",
+            log_def_gen: "Multiple folders detected, generated dan.def ({t}).",
+            log_all_done: "All processing completed. Starting bulk download.",
+
+            btn_proc: "Processing...",
+            btn_done: "Done!",
+            btn_err: "Error"
+        }
+    };
+
+    const rankOptsI18n = {
+        ja: {
+            g1: "級位 ( Index:0-4)", g2: "青段位 (Index:5-9)", g3: "赤段位 (Index:10-14)", g4: "人段位 (Index:15-18)", g5: "外伝 (Index:19)",
+            o1: "五級 (1)", o2: "四級 (2)", o3: "三級 (3)", o4: "二級 (4)", o5: "一級 (5)",
+            o6: "初段 (6)", o7: "二段 (7)", o8: "三段 (8)", o9: "四段 (9)", o10: "五段 (10)",
+            o11: "六段 (11)", o12: "七段 (12)", o13: "八段 (13)", o14: "九段 (14)", o15: "十段 (15)",
+            o16: "玄人 (16)", o17: "名人 (17)", o18: "超人 (18)", o19: "達人 (19)", o20: "外伝 (20)"
+        },
+        en: {
+            g1: "Kyu (Index:0-4)", g2: "Blue Dan (Index:5-9)", g3: "Red Dan (Index:10-14)", g4: "Master Dan (Index:15-18)", g5: "Gaiden (Index:19)",
+            o1: "5th Kyu (1)", o2: "4th Kyu (2)", o3: "3rd Kyu (3)", o4: "2nd Kyu (4)", o5: "1st Kyu (5)",
+            o6: "1st Dan (6)", o7: "2nd Dan (7)", o8: "3rd Dan (8)", o9: "4th Dan (9)", o10: "5th Dan (10)",
+            o11: "6th Dan (11)", o12: "7th Dan (12)", o13: "8th Dan (13)", o14: "9th Dan (14)", o15: "10th Dan (15)",
+            o16: "Kuroto (16)", o17: "Meijin (17)", o18: "Chojin (18)", o19: "Tatsujin (19)", o20: "Gaiden (20)"
+        }
+    };
+
+    let currentLang = 'ja';
+
+    function t(key) {
+        return i18n[currentLang][key] || key;
+    }
+
+    function updateLanguage() {
+        currentLang = document.getElementById('lang-select').value;
+        
+        // 汎用テキスト更新
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (i18n[currentLang][key]) {
+                el.textContent = i18n[currentLang][key];
+            }
+        });
+
+        // プレースホルダー更新
+        document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+            const key = el.getAttribute('data-i18n-ph');
+            if (i18n[currentLang][key]) {
+                el.placeholder = i18n[currentLang][key];
+            }
+        });
+
+        // 基本の段位セレクトボックスの翻訳更新
+        const baseRankSelect = document.getElementById('rank-select');
+        const groups = baseRankSelect.querySelectorAll('optgroup');
+        if (groups.length === 5) {
+            groups[0].label = rankOptsI18n[currentLang].g1;
+            groups[1].label = rankOptsI18n[currentLang].g2;
+            groups[2].label = rankOptsI18n[currentLang].g3;
+            groups[3].label = rankOptsI18n[currentLang].g4;
+            groups[4].label = rankOptsI18n[currentLang].g5;
+        }
+        const options = baseRankSelect.querySelectorAll('option');
+        options.forEach((opt, idx) => {
+            opt.textContent = rankOptsI18n[currentLang]['o' + (idx + 1)];
+        });
+
+        // もしすでにフォルダUIが生成されていれば再描画して言語を反映する
+        if (danFolders.length > 0) {
+            buildMultiFolderUI();
+        }
+    }
+
+    document.getElementById('lang-select').addEventListener('change', updateLanguage);
+
+
+    // ==========================================
+    // ★ 固定された GitHub URL 生成関数 ★
+    // ==========================================
     function getGithubUrl(imageName, rankValue) {
         const baseUrl = "https://raw.githubusercontent.com/fjfjdkdk706-lgtm/TaikoNautsdan-Conversion-tool/main/";
         const danIndex = rankValue - 1; 
@@ -305,12 +483,12 @@
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 canvas.toBlob((blob) => {
                     if (blob) resolve(blob);
-                    else reject(new Error("Canvas to Blob 変換に失敗しました。"));
+                    else reject(new Error("Canvas to Blob conversion failed."));
                 }, 'image/png');
             };
             img.onerror = () => {
                 URL.revokeObjectURL(url);
-                reject(new Error("画像の読み込みに失敗しました。"));
+                reject(new Error("Image load failed."));
             };
             img.src = url;
         });
@@ -349,7 +527,8 @@
 
     async function handleFiles(files) {
         danFolders = [];
-        logArea.innerHTML = '';
+        // ログエリアの初期化時は現在の言語設定を参照
+        logArea.innerHTML = `<div class="log-info">> ${t('log_ready')}</div>`;
         statusDiv.textContent = '';
         runBtn.classList.remove('active');
         settingsArea.style.display = 'none';
@@ -388,8 +567,8 @@
         }
 
         if (danFolders.length > 0) {
-            statusDiv.textContent = `${danFolders.length} 個の段位フォルダを検出`;
-            log(`${danFolders.length} 個のTJAを検出しました。一括設定が可能です。`, 'ok');
+            statusDiv.textContent = t('log_found_folder').replace('{n}', danFolders.length);
+            log(t('log_found_tja').replace('{n}', danFolders.length), 'ok');
             
             for (let folder of danFolders) {
                 await scanSongsAndTitleForFolder(folder);
@@ -399,7 +578,7 @@
             settingsArea.style.display = 'block';
             runBtn.classList.add('active');
         } else {
-            log('エラー: フォルダ内にTJAファイルが見つかりません。', 'err');
+            log(t('log_err_notja'), 'err');
         }
     }
 
@@ -424,9 +603,9 @@
             defTitleContainer.id = 'def-title-container';
             defTitleContainer.className = 'form-group';
             defTitleContainer.innerHTML = `
-                <label class="form-label" style="color: #e74c3c;">★ コース全体タイトル (dan.def)</label>
-                <div class="form-note">ゲーム内に表示される全体のフォルダ名になります。また、ダウンロードされるZIPファイル名にも適用されます。</div>
-                <input type="text" id="def-title-input" placeholder="段位道場" value="段位道場">
+                <label class="form-label" style="color: #e74c3c;">${t('def_title')}</label>
+                <div class="form-note">${t('def_note')}</div>
+                <input type="text" id="def-title-input" placeholder="${t('def_ph')}" value="${t('def_ph')}">
             `;
             settingsArea.insertBefore(defTitleContainer, settingsArea.firstChild);
         }
@@ -454,8 +633,11 @@
             
             const checkStr = folder.parsedTitle || folder.folderName;
             const foundRank = rankKeywords.find(item => checkStr.includes(item.kw));
-            if (foundRank) {
-                rankSelectClone.value = foundRank.val;
+            if (foundRank && !folder.uiRank) { 
+                rankSelectClone.value = foundRank.val; 
+            } else if (folder.uiRank) {
+                // UI再構築時は以前選択していた値を保持する
+                rankSelectClone.value = folder.uiRank.value;
             }
 
             rankRow.innerHTML = `<div class="multi-label" title="${labelStr}">${labelStr}</div>`;
@@ -468,7 +650,7 @@
             const titleInput = document.createElement('input');
             titleInput.type = 'text';
             titleInput.className = 'multi-input';
-            titleInput.value = folder.parsedTitle || folder.folderName;
+            titleInput.value = folder.uiTitle ? folder.uiTitle.value : (folder.parsedTitle || folder.folderName);
             titleRow.innerHTML = `<div class="multi-label" title="${labelStr}">${labelStr}</div>`;
             titleRow.appendChild(titleInput);
             titleContainer.appendChild(titleRow);
@@ -478,12 +660,19 @@
             plateRow.className = 'multi-row';
             const plateSel = document.createElement('select');
             plateSel.className = 'multi-input';
-            plateSel.innerHTML = `<option value="">(自動検索して適用)</option>`;
+            plateSel.innerHTML = `<option value="">${t('opt_auto')}</option>`;
+            
+            let previouslySelectedPlate = folder.uiPlate ? folder.uiPlate.value : null;
+
             folder.images.forEach(img => {
                 const opt = document.createElement('option');
                 opt.value = img;
                 opt.textContent = img;
-                if (img.toLowerCase() === 'plate.png') opt.selected = true;
+                if (previouslySelectedPlate) {
+                    if (img === previouslySelectedPlate) opt.selected = true;
+                } else {
+                    if (img.toLowerCase() === 'plate.png') opt.selected = true;
+                }
                 plateSel.appendChild(opt);
             });
             plateRow.innerHTML = `<div class="multi-label" title="${labelStr}">${labelStr}</div>`;
@@ -501,8 +690,10 @@
                     const cb = document.createElement('input');
                     cb.type = 'checkbox';
                     cb.value = 'true';
+                    if (song.uiCheck && song.uiCheck.checked) cb.checked = true;
+
                     const lbl = document.createElement('label');
-                    lbl.textContent = `${sIdx + 1}曲目`; 
+                    lbl.textContent = t('song_nth').replace('{n}', sIdx + 1);
                     
                     lbl.onclick = () => { cb.checked = !cb.checked; };
                     
@@ -526,36 +717,36 @@
             if(lines.length > 0 && lines[0].charCodeAt(0) === 0xFEFF) lines[0] = lines[0].substr(1);
 
             for(let line of lines) {
-                const t = line.trim();
-                if(!foundTitle && t.toUpperCase().startsWith('TITLE:')) {
-                    foundTitle = t.substring(6).trim();
+                const tStr = line.trim();
+                if(!foundTitle && tStr.toUpperCase().startsWith('TITLE:')) {
+                    foundTitle = tStr.substring(6).trim();
                 }
-                if(t.toUpperCase().startsWith('#NEXTSONG')) {
+                if(tStr.toUpperCase().startsWith('#NEXTSONG')) {
                     songCount++;
-                    const args = parseNextSongArgs(t);
+                    const args = parseNextSongArgs(tStr);
                     folder.songs.push({ title: args[0] || `Song ${songCount}` });
                 }
             }
             folder.parsedTitle = foundTitle;
         } catch(e) {
-            log(`[${folder.folderName}] 解析エラー: ${e.message}`, 'warn');
+            log(`[${folder.folderName}] Error: ${e.message}`, 'warn');
         }
     }
 
     runBtn.addEventListener('click', async () => {
         if (danFolders.length === 0) return;
-        runBtn.textContent = "処理中...";
+        runBtn.textContent = t('btn_proc');
         runBtn.classList.remove('active');
         try {
             await processTaikoNautsConversion();
-            runBtn.textContent = "完了！";
+            runBtn.textContent = t('btn_done');
         } catch (e) {
             console.error(e);
-            log(`処理失敗: ${e.message}`, 'err');
-            runBtn.textContent = "エラー";
+            log(`${t('btn_err')}: ${e.message}`, 'err');
+            runBtn.textContent = t('btn_err');
         }
         setTimeout(() => {
-            runBtn.textContent = "変換開始";
+            runBtn.textContent = t('btn_start');
             runBtn.classList.add('active');
         }, 3000);
     });
@@ -581,7 +772,7 @@
             const userTitle = folder.uiTitle.value.trim() || folder.folderName;
             const danIndexValue = rankValue - 1; 
 
-            log(`[処理開始] ${userTitle} (Rank Index: ${danIndexValue})`, 'info');
+            log(t('log_proc_start').replace('{t}', userTitle).replace('{i}', danIndexValue), 'info');
 
             let sections = [];
             let buffer = [];
@@ -602,7 +793,6 @@
 
             let globalExam = { gauge: null, conditions: {} }; 
             let songExams = []; 
-            // ★ EXAMのTJA内での出現順番を保持するための配列
             let examOrder = []; 
 
             if (sections.length > 0) {
@@ -625,8 +815,6 @@
             const rootFolder = zip.folder(userTitle);
 
             let danSongs = [];
-            
-            // ★ 最初のBPM（globalBpm）を取得
             let globalBpm = 120;
             let balloonCursor = 0;
             
@@ -646,7 +834,7 @@
                 balloonCursor += count79(sections[0].lines);
             }
 
-            let currentBpm = globalBpm; // 各曲をまたいで引き継ぐ用のBPM状態
+            let currentBpm = globalBpm; 
 
             for (let i = 1; i < sections.length; i++) {
                 const section = sections[i];
@@ -669,9 +857,9 @@
 
                 let myExam = {}; 
                 section.lines.forEach(l => {
-                    const t = l.trim();
-                    if (t.toUpperCase().startsWith('EXAM')) {
-                        const parsed = parseExamLine(t);
+                    const tStr = l.trim();
+                    if (tStr.toUpperCase().startsWith('EXAM')) {
+                        const parsed = parseExamLine(tStr);
                         if (parsed && !parsed.isGauge) {
                             myExam[parsed.type] = parsed.val;
                             if (!examOrder.includes(parsed.type)) examOrder.push(parsed.type);
@@ -687,32 +875,29 @@
                     else myBalloons.push(5);
                 }
 
-                // ★ 曲の初速用BPM
-                // 1曲目の場合かつセクション内にBPM指定がないときは、globalBpmを引き継ぐ
                 let songStartBpm = (i === 1) ? globalBpm : currentBpm; 
                 let hasFoundBpmChange = false;
 
                 let bodyLines = [];
                 let totalDelay = 0;
                 section.lines.forEach(l => {
-                    const t = l.trim().toUpperCase();
-                    if (t.startsWith('COURSE:')) { courseStr = l.split(':')[1].trim(); return; }
-                    if (t.startsWith('LEVEL:')) { level = l.split(':')[1].trim(); return; }
-                    if (t.startsWith('EXAM') || t.startsWith('#LEVELHOLD') || t.startsWith('#SECTION') ||
-                        t.startsWith('#START') || t.startsWith('#END') || t.startsWith('BALLOON:') || t.startsWith('TITLE:')) return;
+                    const tStr = l.trim().toUpperCase();
+                    if (tStr.startsWith('COURSE:')) { courseStr = l.split(':')[1].trim(); return; }
+                    if (tStr.startsWith('LEVEL:')) { level = l.split(':')[1].trim(); return; }
+                    if (tStr.startsWith('EXAM') || tStr.startsWith('#LEVELHOLD') || tStr.startsWith('#SECTION') ||
+                        tStr.startsWith('#START') || tStr.startsWith('#END') || tStr.startsWith('BALLOON:') || tStr.startsWith('TITLE:')) return;
                     
-                    if (t.startsWith('BPM:')) {
-                        // 曲セクションのヘッダでBPMが再指定されている場合
+                    if (tStr.startsWith('BPM:')) {
                         if (!hasFoundBpmChange) songStartBpm = parseFloat(l.split(':')[1]);
                         return;
                     }
 
-                    if (t.startsWith('#DELAY')) {
+                    if (tStr.startsWith('#DELAY')) {
                         const val = parseFloat(l.trim().split(/\s+/)[1]);
                         if (!isNaN(val)) totalDelay += val;
                         return;
                     }
-                    if (t.startsWith('#BPMCHANGE')) {
+                    if (tStr.startsWith('#BPMCHANGE')) {
                         hasFoundBpmChange = true;
                         const parts = l.trim().split(/\s+/);
                         if (parts[1]) currentBpm = parseFloat(parts[1]);
@@ -725,10 +910,7 @@
                 let outLines = [];
                 outLines.push(`TITLE:${title}`);
                 if (subTitle) outLines.push(`SUBTITLE:${subTitle}`);
-                
-                // ★ 修正: その曲の正しい初速BPMを出力する
                 outLines.push(`BPM:${songStartBpm}`);
-                
                 outLines.push(`WAVE:${wave}`);
                 outLines.push(`OFFSET:${-totalDelay}`);
                 outLines.push(`GENRE:${genre}`);
@@ -761,8 +943,6 @@
             }
 
             let finalConditions = [];
-
-            // ★ TJAでの出現順番（examOrder）通りに conditions を書き出す
             examOrder.forEach(type => {
                 let hasIndividual = false;
                 for(let i=1; i < sections.length; i++) {
@@ -820,20 +1000,20 @@
                     if (res.ok) {
                         plateBlob = await res.blob();
                     } else {
-                        log(`[${userTitle}] plate.png の取得に失敗しました。`, 'warn');
+                        log(t('log_fetch_err').replace('{t}', userTitle).replace('{img}', "plate.png"), 'warn');
                     }
                 } catch (err) {
-                    log(`通信エラー: plate.png (${err.message})`, 'err');
+                    log(t('log_net_err').replace('{img}', "plate.png").replace('{e}', err.message), 'err');
                 }
             }
 
             if (plateBlob) {
                 try {
-                    log(`[${userTitle}] plateのサイズを1.5倍にリサイズ中...`, 'info');
+                    log(t('log_resize_start').replace('{t}', userTitle), 'info');
                     const resizedPlateBlob = await resizeImage(plateBlob, 1.5);
                     rootFolder.file(finalPlatePath, resizedPlateBlob);
                 } catch (err) {
-                    log(`[${userTitle}] plateのリサイズに失敗したため、元のサイズで保存します。(${err.message})`, 'warn');
+                    log(t('log_resize_err').replace('{t}', userTitle).replace('{e}', err.message), 'warn');
                     rootFolder.file(finalPlatePath, plateBlob);
                 }
             }
@@ -851,10 +1031,10 @@
                             rootFolder.file(imageName, blob);
                             return imageName;
                         } else {
-                            log(`[${userTitle}] ${imageName} の取得に失敗しスキップしました。`, 'warn');
+                            log(t('log_fetch_err').replace('{t}', userTitle).replace('{img}', imageName), 'warn');
                         }
                     } catch (err) {
-                        log(`通信エラー: ${imageName} (${err.message})`, 'err');
+                        log(t('log_net_err').replace('{img}', imageName).replace('{e}', err.message), 'err');
                     }
                     return "";
                 };
@@ -875,14 +1055,14 @@
                 conditions: finalConditions
             };
             rootFolder.file("dan.json", JSON.stringify(danJson, null, 2));
-            log(`[${userTitle}] フォルダの構築が完了しました。`, 'ok');
+            log(t('log_folder_done').replace('{t}', userTitle), 'ok');
         }
 
         let zipFilename = "Converted.zip";
         if (danFolders.length > 1) {
             zip.file("dan.def", defLines.join("\r\n"));
             zipFilename = `${defTitle}.zip`; 
-            log(`複数フォルダが検出されたため、dan.def (${defTitle}) を生成しました。`, 'info');
+            log(t('log_def_gen').replace('{t}', defTitle), 'info');
         } else if (danFolders.length === 1) {
             zipFilename = `${danFolders[0].uiTitle.value.trim() || danFolders[0].folderName}.zip`; 
         }
@@ -894,7 +1074,7 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        log("全処理完了。一括ダウンロードを開始しました。", 'ok');
+        log(t('log_all_done'), 'ok');
     }
 
     function parseExamLine(line) {
